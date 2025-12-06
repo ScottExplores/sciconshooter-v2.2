@@ -1,0 +1,15 @@
+{
+  "accountAssociation": { "header": "", "payload": "", "signature": "" },
+  "baseBuilder": { "ownerAddress": "0x3A8D692Aabdd4981080a8F6af8375a21359464Bf" },
+  "miniapp": {
+    "version": "1",
+    "name": "Scicon Shooter",
+    "homeUrl": "https://sciconshooter.xyz",
+    "iconUrl": "https://sciconshooter.xyz/icon.png",
+    "splashImageUrl": "https://sciconshooter.xyz/icon.png",
+    "splashBackgroundColor": "#000000",
+    "primaryCategory": "games",
+    "tags": ["games", "shooter"],
+    "description": "A sci-fi shooter game on Base."
+  }
+}
