@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TEXT_STRINGS, ASSETS } from '../constants';
 import { LeaderboardEntry } from '../types';
@@ -76,26 +75,17 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, onAbout, leaderboard
         {/* Header Section */}
         <div className="relative text-center w-full flex flex-col items-center shrink-0">
            
-           {/* Title Block: Flex Row - SCICON SHOOTER (Left) | 2025 (Right) */}
+           {/* Title Block: Flex Row - SCICON SHOOTER */}
            <div className="flex flex-row items-center justify-center transform -skew-x-6 gap-2">
                
-               {/* Left Column: Stacked SCICON / SHOOTER */}
-               <div className="flex flex-col items-end">
+               {/* Stacked SCICON / SHOOTER - Centered */}
+               <div className="flex flex-col items-center">
                    <h1 className="text-5xl md:text-7xl font-black arcade-font tracking-tighter text-white drop-shadow-[0_0_30px_rgba(99,102,241,0.8)] leading-none select-none italic">
                      SCICON
                    </h1>
                    <h1 className="text-4xl md:text-6xl font-black arcade-font tracking-wide text-indigo-100 drop-shadow-[0_0_30px_rgba(99,102,241,0.6)] leading-none select-none italic mt-[-5px]">
                      SHOOTER
                    </h1>
-               </div>
-
-               {/* Right Column: Vertical 2025 - Sized to match height */}
-               <div className="h-[80px] md:h-[130px] w-0.5 bg-indigo-500/50 rounded mx-0"></div>
-               <div className="flex flex-col justify-between h-[80px] md:h-[130px] leading-none pt-1">
-                  <span className="text-lg md:text-3xl font-bold text-transparent arcade-font select-none" style={{ WebkitTextStroke: '1px #818cf8' }}>2</span>
-                  <span className="text-lg md:text-3xl font-bold text-transparent arcade-font select-none" style={{ WebkitTextStroke: '1px #818cf8' }}>0</span>
-                  <span className="text-lg md:text-3xl font-bold text-transparent arcade-font select-none" style={{ WebkitTextStroke: '1px #818cf8' }}>2</span>
-                  <span className="text-lg md:text-3xl font-bold text-transparent arcade-font select-none" style={{ WebkitTextStroke: '1px #818cf8' }}>5</span>
                </div>
            </div>
         </div>
@@ -166,7 +156,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, onAbout, leaderboard
 
                     <button 
                       onClick={() => window.open(ASSETS.REFERRAL_LINK, '_blank')}
-                      className="scicon-btn w-full py-2 md:py-3 text-xs md:text-sm font-bold bg-gradient-to-r from-blue-600 to-blue-700 border-none text-white hover:brightness-110 flex flex-col items-center justify-center leading-tight group relative"
+                      className="scicon-btn blue-glow-animate w-full py-2 md:py-3 text-xs md:text-sm font-bold bg-gradient-to-r from-blue-600 to-blue-700 border-none text-white hover:brightness-110 flex flex-col items-center justify-center leading-tight group relative"
                       style={{ background: 'linear-gradient(90deg, #5C5CFF 0%, #4040B0 100%)' }}
                     >
                       <span>JOIN RESEARCHHUB</span>
