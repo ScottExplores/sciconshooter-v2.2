@@ -3,7 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta property="fc:miniapp" content='{"version":"next","imageUrl":"https://sciconshooter.xyz/icon.png","button":{"title":"Play Scicon Shooter","action":{"type":"launch_miniapp","name":"Scicon Shooter","url":"https://sciconshooter.xyz"}}}' />
+    
+    <meta name="fc:miniapp" content='{
+      "version": "next",
+      "imageUrl": "https://sciconshooter.xyz/preview.png",
+      "button": {
+        "title": "Play Scicon Shooter",
+        "action": {
+          "type": "launch_frame",
+          "name": "Scicon Shooter",
+          "url": "https://sciconshooter.xyz",
+          "splashImageUrl": "https://sciconshooter.xyz/icon.png",
+          "splashBackgroundColor": "#0b1020"
+        }
+      }
+    }' />
+
+    <meta property="og:title" content="Scicon Shooter" />
+    <meta property="og:description" content="A sci-fi shooter game on Base. Blast enemies and earn rewards!" />
+    <meta property="og:image" content="https://sciconshooter.xyz/preview.png" />
+    <meta property="og:url" content="https://sciconshooter.xyz" />
+    <meta property="og:type" content="website" />
+
     <title>SciCon Shooter</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
