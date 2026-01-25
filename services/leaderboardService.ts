@@ -1,9 +1,8 @@
 
 import { LeaderboardEntry } from '../types';
+import { PANTRY_CONFIG } from '../constants';
 
-const BIN_ID = "6930c9c9ae596e708f81d80b";
-const API_KEY = "$2a$10$rajKaU1bi5IW2RqR4LHhKOn7q/qrwTI3JAC2kIKOnJxlNKVme9Tle";
-const BASE_URL = "https://api.jsonbin.io/v3/b";
+const BASE_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_CONFIG.ID}/basket/${PANTRY_CONFIG.BASKET_NAME}`;
 
 // Default values so the board is never empty
 const DEFAULT_SCORES: LeaderboardEntry[] = [
@@ -37,49 +36,37 @@ const DEFAULT_SCORES: LeaderboardEntry[] = [
 // 1. FETCH SCORES
 export const getScores = async (): Promise<LeaderboardEntry[]> => {
   try {
-    const response = await fetch(`${BASE_URL}/${BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': API_KEY
-      }
+    const response = await fetch(BASE_URL, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
     });
     
-    if (!response.ok) throw new Error("Failed to fetch");
+    if (!response.ok) {
+        if (response.status === 404) {
+             // Basket doesn't exist yet, return defaults
+             return DEFAULT_SCORES;
+        }
+        throw new Error("Failed to fetch from Pantry");
+    }
     
     const data = await response.json();
-    let fetchedScores = data.record.scores || [];
-
-    // --- CLEANUP LOGIC ---
-    // Remove "Stale" defaults (Scott 5000, Base 4000) if they exist from previous DB state
-    fetchedScores = fetchedScores.filter((s: LeaderboardEntry) => {
-        const isStaleScott = s.name === 'SCOTT' && s.score === 5000;
-        const isStaleBase = s.name === 'BASE' && s.score === 4000;
-        const isStaleGuest = s.name === 'GUEST' && s.score === 1000;
-        return !isStaleScott && !isStaleBase && !isStaleGuest;
-    });
+    let fetchedScores = data.scores || [];
 
     // --- MERGE LOGIC ---
-    // We want to fill the board up to 25 spots with defaults if needed.
-    // Also, we don't want to duplicate defaults if they are already saved.
-    
     const mergedScores = [...fetchedScores];
     
     DEFAULT_SCORES.forEach(def => {
-        // Check if this specific default is already in the fetched scores
         const exists = mergedScores.some(s => s.name === def.name && s.score === def.score);
         if (!exists) {
             mergedScores.push(def);
         }
     });
 
-    // Sort Descending
     mergedScores.sort((a, b) => b.score - a.score);
-
-    // Return Top 25
     return mergedScores.slice(0, 25);
 
   } catch (error) {
     console.error("Leaderboard error:", error);
-    // Fallback to local storage if API fails
     const local = localStorage.getItem('offline_scores');
     return local ? JSON.parse(local) : DEFAULT_SCORES;
   }
@@ -88,29 +75,21 @@ export const getScores = async (): Promise<LeaderboardEntry[]> => {
 // 2. SAVE SCORE
 export const saveScore = async (name: string, score: number, wave: number): Promise<LeaderboardEntry[]> => {
   try {
-    // Step A: Get current scores (cleaned and merged via getScores)
     const currentScores = await getScores();
     
-    // Step B: Add new score
     const newEntry = { name, score, wave, date: new Date().toISOString() };
     const updatedScores = [...currentScores, newEntry];
     
-    // Step C: Sort (High to Low) and Keep Top 25
     updatedScores.sort((a, b) => b.score - a.score);
     const top25 = updatedScores.slice(0, 25);
     
-    // Step D: Save back to Cloud (JSONBin)
-    // This overwrites the bin with the "clean" list, permanently fixing any old bad data
-    await fetch(`${BASE_URL}/${BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': API_KEY
-      },
+    // Pantry POST creates/replaces the entire basket content if we send the full object
+    await fetch(BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scores: top25 })
     });
 
-    // Step E: Save backup to LocalStorage
     localStorage.setItem('offline_scores', JSON.stringify(top25));
     
     return top25;
