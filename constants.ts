@@ -1,8 +1,5 @@
 
-
-
 // --- ASSET CONFIGURATION ---
-// TODO: Replace these placeholder URLs with your actual assets
 export const ASSETS = {
   PLAYER_SHIP: "https://www.researchhub.com/favicons/mstile-150x150.png", 
   
@@ -30,8 +27,39 @@ export const ASSETS = {
   
   // Mini Boss 1
   BOTTLENECK_ICON: "https://lh3.googleusercontent.com/rd-gg-dl/ABS2GSntvTHHYjyV3FOfg6o4_8pKVhDZNAwdk6bl3HrwWFcHIEfjB9JWqYrNDIgaUl2Ofc2rsSPdEzL9HsEj9H0N02KKNUQ5hrOh83pdq4HrUqKn4w2pEot8Xl-BkWdETc688975BXGTkuNCuR6HggINOb7sM1HFkEUZ23UJ0Dtmn123nxFet5ZgPe95aVrMKJ1xumGym4C9GJOpVKtjkNfcKryBo0XvZ3TjhvehSv7EbhDtfhuAfQuhq641DFuW_BTQyI1WU-PFcGZc--WwBvFiQkioMpk5X-ELDw2dNfMCLTdm_9DdLmrvIIqjPIs-IMm4qVzPkw9W080EHirrGktlPki-IpLBQrh19mJzkkDrT73VJnWgcwyL48De1d1KuAwRjNo6ifNGV-MtNdzkalgHBFdbZY4pe2rwe2BziYGV-umL44FX4skfmcQuvZ_MuQS8L5C-1fPFHu3v_wcJQaIerY7coLs6OlS97x694zYRmwWc554NODQnFl-tZ8gGH7gYC83WWdoQgrA67yNIZH65urxleeGbmemMAxbE7dol5H9hdWas1GWz6CJHSII7VsaUL7WGy_TfaLZ-KcwXENEme1V2L5KUASqZQtkS5aH1mScHkzYDtEALyBisotpCinj-o6-Ly-uOeju-RDVnNEQk7vHMhpKoPgXU0aH979ER1hIJOYnDOtkwwi9Bm38BE0ghKz3KnA6JTHhYUweAn2q42GkUv3OF1VimkOSsubwR40TSTwhZahKQzEBNewT9dqTF1VbcZNRxCYd7HY4zQqMfWpKzQcbCQe2smIwzXJUBSvxFijktkwnmkKswd-L7XNMdLwq4NUO30qQoqmztQZGKS5wDDAAbQCS7yjH6k0t12HsyN_4O_in6vEyCW63pglgjpRtKQ7uwrgKcn9ijhsyePw2Pp67XjY5080KkEhe87kl6kyum6DXgb-xi34p3bb8TC9hiuXtnkKaxEv6iEPuG7urDOEo7crKMXdA06VYj4GX42pjaXITUve6UrzPY4lqlwZ9jZPbLryV0yLzdVHiQgIOtfBHiu1DnJ5HEVjSjo3PGtrHJztssVvN61YUkDmzjpGXFqojXjVqKlb8CjwKjq0WHHNOu23P6gDg7YuxEVm_-CUPAoKzZxSOiAPWs10VRC_RGBdnV67g4fvJPpYBtpyQGzR4WG-grfJatwMutdjXdPq8xHShewioCG903JoVnLZU2p01PMBgnPBYn5p9clqobUWw2=s1024-rj",
-
-  BG_STARFIELD: "https://images.unsplash.com/photo-1534796636912-3b95b3ab5980?auto=format&fit=crop&w=1080&q=80",
+  MENU_HERO: "/game-art/backgrounds/menu-hero.png",
+  GAME_BG_BACK: "/game-art/backgrounds/bg-back.png",
+  GAME_BG_STARS: "/game-art/backgrounds/bg-stars.png",
+  GAME_BG_PLANET: "/game-art/backgrounds/bg-planet.png",
+  GAME_PARALLAX_BACK: "/game-art/backgrounds/parallax-back.png",
+  GAME_PARALLAX_STARS: "/game-art/backgrounds/parallax-stars.png",
+  GAME_PARALLAX_FAR_PLANETS: "/game-art/backgrounds/parallax-far-planets.png",
+  GAME_PARALLAX_BIG_PLANET: "/game-art/backgrounds/parallax-big-planet.png",
+  GAME_PARALLAX_RING_PLANET: "/game-art/backgrounds/parallax-ring-planet.png",
+  ENEMY_DRONE_FRAMES: [
+    "/game-art/enemies/enemy-drone-1.png",
+    "/game-art/enemies/enemy-drone-2.png",
+    "/game-art/enemies/enemy-drone-3.png",
+    "/game-art/enemies/enemy-drone-4.png",
+    "/game-art/enemies/enemy-drone-5.png"
+  ],
+  ENEMY_SWARM_FRAMES: [
+    "/game-art/enemies/swarm-1.png",
+    "/game-art/enemies/swarm-2.png",
+    "/game-art/enemies/swarm-3.png",
+    "/game-art/enemies/swarm-4.png"
+  ],
+  ENEMY_BRICK_FRAMES: [
+    "/game-art/enemies/asteroid-1.png",
+    "/game-art/enemies/asteroid-2.png",
+    "/game-art/enemies/asteroid-3.png",
+    "/game-art/enemies/asteroid-4.png",
+    "/game-art/enemies/asteroid-5.png"
+  ],
+  ENEMY_JOURNAL: "/game-art/enemies/journal-ace.png",
+  MINI_BOSS: "/game-art/bosses/mini-boss-drone.png",
+  WALL_BOSS_SEGMENT: "/game-art/bosses/wall-segment.png",
+  FINAL_BOSS: "/game-art/bosses/final-boss-sentinel.png",
   
   // Referral Assets
   REFERRAL_IMG: "https://lh3.googleusercontent.com/rd-gg-dl/ABS2GSntvTHHYjyV3FOfg6o4_8pKVhDZNAwdk6bl3HrwWFcHIEfjB9JWqYrNDIgaUl2Ofc2rsSPdEzL9HsEj9H0N02KKNUQ5hrOh83pdq4HrUqKn4w2pEot8Xl-BkWdETc688975BXGTkuNCuR6HggINOb7sM1HFkEUZ23UJ0Dtmn123nxFet5ZgPe95aVrMKJ1xumGym4C9GJOpVKtjkNfcKryBo0XvZ3TjhvehSv7EbhDtfhuAfQuhq641DFuW_BTQyI1WU-PFcGZc--WwBvFiQkioMpk5X-ELDw2dNfMCLTdm_9DdLmrvIIqjPIs-IMm4qVzPkw9W080EHirrGktlPki-IpLBQrh19mJzkkDrT73VJnWgcwyL48De1d1KuAwRjNo6ifNGV-MtNdzkalgHBFdbZY4pe2rwe2BziYGV-umL44FX4skfmcQuvZ_MuQS8L5C-1fPFHu3v_wcJQaIerY7coLs6OlS97x694zYRmwWc554NODQnFl-tZ8gGH7gYC83WWdoQgrA67yNIZH65urxleeGbmemMAxbE7dol5H9hdWas1GWz6CJHSII7VsaUL7WGy_TfaLZ-KcwXENEme1V2L5KUASqZQtkS5aH1mScHkzYDtEALyBisotpCinj-o6-Ly-uOeju-RDVnNEQk7vHMhpKoPgXU0aH979ER1hIJOYnDOtkwwi9Bm38BE0ghKz3KnA6JTHhYUweAn2q42GkUv3OF1VimkOSsubwR40TSTwhZahKQzEBNewT9dqTF1VbcZNRxCYd7HY4zQqMfWpKzQcbCQe2smIwzXJUBSvxFijktkwnmkKswd-L7XNMdLwq4NUO30qQoqmztQZGKS5wDDAAbQCS7yjH6k0t12HsyN_4O_in6vEyCW63pglgjpRtKQ7uwrgKcn9ijhsyePw2Pp67XjY5080KkEhe87kl6kyum6DXgb-xi34p3bb8TC9hiuXtnkKaxEv6iEPuG7urDOEo7crKMXdA06VYj4GX42pjaXITUve6UrzPY4lqlwZ9jZPbLryV0yLzdVHiQgIOtfBHiu1DnJ5HEVjSjo3PGtrHJztssVvN61YUkDmzjpGXFqojXjVqKlb8CjwKjq0WHHNOu23P6gDg7YuxEVm_-CUPAoKzZxSOiAPWs10VRC_RGBdnV67g4fvJPpYBtpyQGzR4WG-grfJatwMutdjXdPq8xHShewioCG903JoVnLZU2p01PMBgnPBYn5p9clqobUWw2=s1024-rj",
@@ -42,6 +70,22 @@ export const ASSETS = {
 export const PANTRY_CONFIG = {
   ID: "627252f3-a6e9-434c-b02d-70bf8822a0e8",
   BASKET_NAME: "leaderboard"
+};
+
+export const DONATION_CONFIG = {
+  RECIPIENT_ADDRESS: "0x3A8D692Aabdd4981080a8F6af8375a21359464Bf",
+  RSC_CONTRACT_ADDRESS: "0xfbb75a59193a3525a8825bebe7d4b56899e2f7e1",
+  BASE_CHAIN_ID_HEX: "0x2105",
+  EXPLORER_BASE_URL: "https://basescan.org",
+  PRESET_RSC_AMOUNTS: [1, 5, 10]
+};
+
+export const STORAGE_KEYS = {
+  PLAYER_STATS: "rh_player_stats",
+  HIGH_SCORE: "rh_highscore",
+  OFFLINE_SCORES: "offline_scores",
+  LOCAL_LEADERBOARD_ARCHIVE: "scicon_local_leaderboard_archive",
+  WALLET_ADDRESS: "scicon_wallet_address"
 };
 
 export const COLORS = {

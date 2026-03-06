@@ -68,3 +68,21 @@ export interface Stats {
   bossHp: number;
   bossMaxHp: number;
 }
+
+export type WalletConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error';
+export type DonationStatus = 'idle' | 'switching_network' | 'processing' | 'confirming' | 'success' | 'error';
+
+export interface WalletSession {
+  address: string | null;
+  chainId: number | null;
+  status: WalletConnectionStatus;
+  error: string;
+}
+
+export interface MiniAppState {
+  isMiniApp: boolean;
+  clientFid: number | null;
+  added: boolean;
+  userFid: number | null;
+  platformType: 'web' | 'mobile' | null;
+}

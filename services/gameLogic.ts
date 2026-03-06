@@ -38,6 +38,7 @@ export class Entity {
 
   // Projectile Ownership
   isPlayerShot: boolean = false;
+  variant: number = 0;
   
   constructor(type: EntityType, x: number, y: number) {
     this.id = Math.random().toString(36).substr(2, 9);
@@ -91,19 +92,22 @@ class Star {
   speed: number;
   alpha: number;
   twinkleDir: number;
+  drift: number;
 
   constructor(width: number, height: number) {
+    const depth = Math.random();
     this.x = Math.random() * width;
     this.y = Math.random() * height;
-    this.size = Math.random() * 1.5 + 0.5; 
-    this.speed = this.size * 0.2; 
-    this.alpha = 0.3 + Math.random() * 0.7;
-    this.twinkleDir = Math.random() > 0.5 ? 0.01 : -0.01;
+    this.size = 0.6 + (depth * 2.4);
+    this.speed = 0.08 + (depth * 1.35);
+    this.alpha = 0.2 + (depth * 0.7);
+    this.twinkleDir = (Math.random() > 0.5 ? 1 : -1) * (0.003 + (depth * 0.01));
+    this.drift = -0.02 - (depth * 0.12);
   }
 
   update(width: number, height: number) {
     this.y += this.speed;
-    this.x -= this.speed * 0.1; // Slight angle for depth
+    this.x += this.drift;
 
     // Twinkle effect
     this.alpha += this.twinkleDir;
@@ -125,7 +129,7 @@ class Star {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+    ctx.fillStyle = `rgba(226, 244, 255, ${this.alpha})`;
     ctx.fillRect(this.x, this.y, this.size, this.size);
   }
 }
@@ -204,6 +208,14 @@ const loadImage = (url: string) => {
   return img;
 };
 
+const getReadyImage = (url: string) => {
+  const img = imageCache[url];
+  if (!img || !img.complete || img.naturalWidth <= 0) {
+    return null;
+  }
+  return img;
+};
+
 export class GameEngine {
   width: number = 0;
   height: number = 0;
@@ -239,14 +251,120 @@ export class GameEngine {
     this.player.width = 100;
     this.player.height = 100; 
     
-    loadImage(ASSETS.PLAYER_SHIP);
-    loadImage(ASSETS.FOUNDER_BRIAN);
-    loadImage(ASSETS.FOUNDER_PATRICK);
-    loadImage(ASSETS.FOUNDER_JEFFREY);
-    loadImage(ASSETS.FOUNDER_4);
-    loadImage(ASSETS.FOUNDER_ARSHIA); // Load the new asset
-    loadImage(ASSETS.RSC_TOKEN);
-    loadImage(ASSETS.BOTTLENECK_ICON);
+    [
+      ASSETS.PLAYER_SHIP,
+      ASSETS.FOUNDER_BRIAN,
+      ASSETS.FOUNDER_PATRICK,
+      ASSETS.FOUNDER_JEFFREY,
+      ASSETS.FOUNDER_4,
+      ASSETS.FOUNDER_ARSHIA,
+      ASSETS.RSC_TOKEN,
+      ASSETS.GAME_BG_BACK,
+      ASSETS.GAME_BG_STARS,
+      ASSETS.GAME_BG_PLANET,
+      ASSETS.GAME_PARALLAX_BACK,
+      ASSETS.GAME_PARALLAX_STARS,
+      ASSETS.GAME_PARALLAX_FAR_PLANETS,
+      ASSETS.GAME_PARALLAX_BIG_PLANET,
+      ASSETS.GAME_PARALLAX_RING_PLANET,
+      ASSETS.ENEMY_JOURNAL,
+      ASSETS.MINI_BOSS,
+      ASSETS.WALL_BOSS_SEGMENT,
+      ASSETS.FINAL_BOSS,
+      ...ASSETS.ENEMY_DRONE_FRAMES,
+      ...ASSETS.ENEMY_SWARM_FRAMES,
+      ...ASSETS.ENEMY_BRICK_FRAMES
+    ].forEach(loadImage);
+  }
+
+  getAnimatedFrame(frames: string[], entity: Entity, speed: number) {
+    const index = (Math.floor(this.frameCount / speed) + entity.variant) % frames.length;
+    return frames[index];
+  }
+
+  drawSprite(
+    ctx: CanvasRenderingContext2D,
+    url: string,
+    width: number,
+    height: number,
+    options: {
+      shadowColor?: string;
+      shadowBlur?: number;
+      rotation?: number;
+      alpha?: number;
+      yOffset?: number;
+    } = {}
+  ) {
+    const img = getReadyImage(url);
+    if (!img) {
+      return false;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = options.alpha ?? 1;
+    if (options.shadowColor) ctx.shadowColor = options.shadowColor;
+    if (options.shadowBlur) ctx.shadowBlur = options.shadowBlur;
+    if (options.rotation) ctx.rotate(options.rotation);
+    const yOffset = options.yOffset ?? 0;
+    ctx.drawImage(img, -width / 2, -height / 2 + yOffset, width, height);
+    ctx.restore();
+    return true;
+  }
+
+  drawTiledLayer(
+    ctx: CanvasRenderingContext2D,
+    url: string,
+    scale: number,
+    speedY: number,
+    speedX: number,
+    alpha: number
+  ) {
+    const img = getReadyImage(url);
+    if (!img) {
+      return;
+    }
+
+    const tileW = img.width * scale;
+    const tileH = img.height * scale;
+    const offsetY = -((this.frameCount * speedY) % tileH);
+    const offsetX = -((this.frameCount * speedX) % tileW);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (let x = offsetX - tileW; x < this.width + tileW; x += tileW) {
+      for (let y = offsetY - tileH; y < this.height + tileH; y += tileH) {
+        ctx.drawImage(img, x, y, tileW, tileH);
+      }
+    }
+    ctx.restore();
+  }
+
+  drawBackgroundLayers(ctx: CanvasRenderingContext2D) {
+    this.drawTiledLayer(ctx, ASSETS.GAME_PARALLAX_BACK, 5, 0.06, 0.015, 0.6);
+    this.drawTiledLayer(ctx, ASSETS.GAME_PARALLAX_STARS, 5, 0.1, 0.02, 0.45);
+    this.drawTiledLayer(ctx, ASSETS.GAME_BG_BACK, 5, 0.16, 0.03, 0.35);
+    this.drawTiledLayer(ctx, ASSETS.GAME_BG_STARS, 5, 0.22, 0.035, 0.5);
+    this.drawTiledLayer(ctx, ASSETS.GAME_PARALLAX_FAR_PLANETS, 5, 0.12, 0.02, 0.35);
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    const horizon = getReadyImage(ASSETS.GAME_BG_PLANET);
+    if (horizon) {
+      const planetHeight = Math.max(220, this.height * 0.3);
+      ctx.drawImage(horizon, 0, this.height - planetHeight, this.width, planetHeight);
+    }
+    ctx.restore();
+
+    const planetDrift = (this.frameCount * 0.2) % (this.width + 200);
+    ctx.save();
+    ctx.translate(this.width - 130, 110 + Math.sin(this.frameCount * 0.01) * 10);
+    this.drawSprite(ctx, ASSETS.GAME_PARALLAX_BIG_PLANET, 170, 170, { alpha: 0.55 });
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate((this.width + 100) - planetDrift, 180 + Math.sin(this.frameCount * 0.015) * 12);
+    this.drawSprite(ctx, ASSETS.GAME_PARALLAX_RING_PLANET, 90, 180, { alpha: 0.75 });
+    ctx.restore();
   }
 
   init(width: number, height: number) {
@@ -258,10 +376,10 @@ export class GameEngine {
     this.bgEntities = [];
     this.stars = [];
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
         this.bgEntities.push(new BackgroundEntity(width, height));
     }
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 180; i++) {
       this.stars.push(new Star(width, height));
     }
 
@@ -659,12 +777,12 @@ export class GameEngine {
       if (this.stats.bossProgress < 0.3) {
         if (typeRoll > 0.7) enemyType = EntityType.ENEMY_SWARM;
       } else if (this.stats.bossProgress < 0.7) {
-        if (typeRoll > 0.5) enemyType = EntityType.ENEMY_BRICK;
-        else if (typeRoll > 0.8) enemyType = EntityType.ENEMY_SWARM;
+        if (typeRoll > 0.8) enemyType = EntityType.ENEMY_SWARM;
+        else if (typeRoll > 0.5) enemyType = EntityType.ENEMY_BRICK;
       } else {
-        if (typeRoll > 0.3) enemyType = EntityType.ENEMY_JOURNAL;
+        if (typeRoll > 0.85) enemyType = EntityType.ENEMY_SWARM;
         else if (typeRoll > 0.6) enemyType = EntityType.ENEMY_BRICK;
-        else if (typeRoll > 0.85) enemyType = EntityType.ENEMY_SWARM;
+        else if (typeRoll > 0.3) enemyType = EntityType.ENEMY_JOURNAL;
       }
 
       this.createEnemy(enemyType, x, -50);
@@ -675,47 +793,51 @@ export class GameEngine {
     const e = new Entity(type, x, y);
     const hpMult = 1 + (this.wave * 0.3);
     const speedBoost = 1 + (this.wave * 0.1);
+    e.variant = Math.floor(Math.random() * 100);
     
     if (type === EntityType.ENEMY_DRONE) {
       e.vy = 2.5 * speedBoost; 
       e.hp = 2 * hpMult;
-      e.color = '#aaaaaa'; 
+      e.width = 44;
+      e.height = 44;
+      e.color = '#7dd3fc'; 
       e.text = "🔒"; 
     } else if (type === EntityType.ENEMY_JOURNAL) {
-      e.vy = 5 * speedBoost; 
-      e.vx = Math.sin(this.frameCount * 0.2) * 4; 
+      e.vy = 4.4 * speedBoost; 
+      e.vx = Math.sin((this.frameCount + e.variant) * 0.2) * 4; 
       e.hp = 3 * hpMult;
-      e.color = '#ff4444'; 
+      e.color = '#fb7185'; 
       e.text = "📕"; 
-      e.width = 40;
-      e.height = 40;
+      e.width = 56;
+      e.height = 66;
     } else if (type === EntityType.ENEMY_BRICK) {
       e.vy = 1.5 * speedBoost;
       e.hp = 8 * hpMult;
-      e.width = 40;
-      e.height = 40;
-      e.color = '#ffbb33'; 
+      e.width = 54;
+      e.height = 54;
+      e.color = '#f59e0b'; 
       e.text = "📰";
     } else if (type === EntityType.ENEMY_SWARM) {
       e.vy = 3.5 * speedBoost;
       e.hp = 1 * hpMult;
-      e.width = 20;
-      e.height = 20;
-      e.color = '#00C851'; 
+      e.width = 34;
+      e.height = 28;
+      e.color = '#34d399'; 
       e.text = "🪰";
     } 
 
+    e.maxHp = e.hp;
     this.entities.push(e);
   }
 
   spawnMiniBoss(num: number) {
     const mb = new Entity(EntityType.MINI_BOSS, this.width/2 - 50, -100);
-    mb.width = 120;
-    mb.height = 120;
+    mb.width = 140;
+    mb.height = 160;
     mb.hp = 50 + (this.wave * 30);
     mb.maxHp = mb.hp;
     mb.vy = 2;
-    mb.color = '#ff4444';
+    mb.color = '#fb7185';
     this.miniBossRef = mb;
     this.entities.push(mb);
   }
@@ -724,10 +846,9 @@ export class GameEngine {
     const rows = 2; // UPDATED to 2 rows
     const cols = 6; 
     const isMobile = this.width < 600;
-    // MADE BLOCKS BIGGER
-    const blockW = isMobile ? 38 : 48;
-    const blockH = isMobile ? 32 : 40;
-    const gap = 2;
+    const blockW = isMobile ? 42 : 52;
+    const blockH = isMobile ? 50 : 60;
+    const gap = 4;
     const startX = (this.width - ((blockW+gap)*cols))/2;
     
     for (let r=0; r<rows; r++) {
@@ -736,8 +857,10 @@ export class GameEngine {
             e.width = blockW;
             e.height = blockH;
             e.hp = 5 + (this.wave * 4);
-            e.color = '#B22222'; 
+            e.maxHp = e.hp;
+            e.color = '#fb7185'; 
             e.text = "🧱"; // UPDATED to Brick Emoji
+            e.variant = (r * cols) + c;
             e.vx = 0;
             this.entities.push(e);
         }
@@ -818,8 +941,8 @@ export class GameEngine {
 
   spawnBoss() {
     const boss = new Entity(EntityType.BOSS, this.width / 2 - 100, -200);
-    boss.width = 200;
-    boss.height = 180;
+    boss.width = 220;
+    boss.height = 200;
     boss.hp = 200 + (this.stats.wave * 150); 
     boss.maxHp = boss.hp;
     boss.color = '#990000';
@@ -1126,6 +1249,7 @@ export class GameEngine {
   draw(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, this.width, this.height);
+    this.drawBackgroundLayers(ctx);
     this.stars.forEach(star => star.draw(ctx));
     this.bgEntities.forEach(bg => bg.draw(ctx));
     
@@ -1194,110 +1318,65 @@ export class GameEngine {
   
   drawMiniBoss(ctx: CanvasRenderingContext2D, e: Entity) {
       this.drawHealthBar(ctx, e, 12);
-      ctx.globalAlpha = 1.0; 
-      
-      const img = imageCache[ASSETS.BOTTLENECK_ICON];
-      if (img && img.complete && img.naturalWidth > 0) {
-          ctx.drawImage(img, -e.width/2, -e.height/2, e.width, e.height);
-      } else {
-          ctx.save();
-          const w = e.width;
-          const h = e.height;
-          ctx.strokeStyle = '#6b7280';
-          ctx.lineWidth = 4;
-          for(let i=0; i<4; i++) {
-              const angle = (Math.PI/4) + (i * Math.PI/2) + (Math.sin(this.frameCount * 0.1) * 0.2);
-              ctx.beginPath();
-              ctx.moveTo(0, 0);
-              const ex = Math.cos(angle) * w * 0.6;
-              const ey = Math.sin(angle) * h * 0.6;
-              const cx = Math.cos(angle) * w * 0.8;
-              const cy = Math.sin(angle) * h * 0.8;
-              ctx.quadraticCurveTo(ex, ey, cx, cy);
-              ctx.stroke();
-              ctx.fillStyle = '#9ca3af';
-              ctx.beginPath();
-              ctx.arc(cx, cy, 5, 0, Math.PI*2);
-              ctx.fill();
-          }
-          const gradient = ctx.createLinearGradient(0, -h/2, 0, h/2);
-          gradient.addColorStop(0, '#818cf8');
-          gradient.addColorStop(0.5, '#4f46e5');
-          gradient.addColorStop(1, '#312e81');
-          ctx.fillStyle = gradient;
-          ctx.strokeStyle = '#a5b4fc';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(-w/2, -h/2); 
-          ctx.lineTo(w/2, -h/2);  
-          ctx.lineTo(w/4, 0);    
-          ctx.lineTo(w/3, h/3); 
-          ctx.lineTo(0, h/2);    
-          ctx.lineTo(-w/3, h/3); 
-          ctx.lineTo(-w/4, 0);    
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          ctx.restore();
+      ctx.globalAlpha = 1.0;
+      const bob = Math.sin(this.frameCount * 0.08) * 4;
+      const drewSprite = this.drawSprite(ctx, ASSETS.MINI_BOSS, e.width, e.height, {
+        shadowColor: '#fb7185',
+        shadowBlur: 22,
+        yOffset: bob
+      });
+
+      if (!drewSprite) {
+        ctx.save();
+        ctx.fillStyle = '#fb7185';
+        ctx.beginPath();
+        ctx.roundRect(-e.width / 2, -e.height / 2, e.width, e.height, 18);
+        ctx.fill();
+        ctx.restore();
       }
+
       ctx.save();
       ctx.font = 'bold 12px Orbitron';
-      ctx.fillStyle = '#ff4444';
+      ctx.fillStyle = '#fb7185';
       ctx.textAlign = 'center';
-      ctx.fillText("BOTTLENECK", 0, -e.height/2 - 35);
+      ctx.fillText("BOTTLENECK DRONE", 0, -e.height/2 - 35);
       ctx.restore();
   }
 
   drawBoss(ctx: CanvasRenderingContext2D, e: Entity) {
       this.drawHealthBar(ctx, e, 12);
       ctx.globalAlpha = 1.0;
-      ctx.save();
-      if (e.isCharging) {
-          ctx.shadowBlur = 50;
-          ctx.shadowColor = '#fff';
-      } else {
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#ff0000';
+      const pulse = e.isCharging ? 42 : 24;
+      const bob = Math.sin(this.frameCount * 0.04) * 5;
+      const drewSprite = this.drawSprite(ctx, ASSETS.FINAL_BOSS, e.width, e.height, {
+        shadowColor: e.isCharging ? '#ffffff' : '#ef4444',
+        shadowBlur: pulse,
+        yOffset: bob
+      });
+
+      if (!drewSprite) {
+        ctx.save();
+        ctx.fillStyle = '#7f1d1d';
+        ctx.fillRect(-e.width / 2, -e.height / 2, e.width, e.height);
+        ctx.restore();
       }
-      const w = e.width;
-      const h = e.height;
-      const hw = w/2;
-      const hh = h/2;
-      ctx.fillStyle = '#4a0d0d'; 
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 4;
-      ctx.fillRect(-hw, -hh, w/4, h);
-      ctx.strokeRect(-hw, -hh, w/4, h);
-      ctx.fillRect(hw - w/4, -hh, w/4, h);
-      ctx.strokeRect(hw - w/4, -hh, w/4, h);
-      ctx.beginPath();
-      ctx.moveTo(-hw + w/4, -hh + 20);
-      ctx.lineTo(hw - w/4, -hh + 20);
-      ctx.lineTo(hw - w/4, -hh + 50);
-      ctx.lineTo(0, -hh + 80); 
-      ctx.lineTo(-hw + w/4, -hh + 50);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = e.isCharging ? '#fff' : '#000';
-      ctx.beginPath();
-      ctx.arc(0, 0, 30, 0, Math.PI*2);
-      ctx.fill();
-      ctx.strokeStyle = '#ff4444';
+
+      ctx.save();
+      ctx.strokeStyle = e.isCharging ? '#f8fafc' : '#fb7185';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 50, 10, this.frameCount * 0.1, 0, Math.PI*2);
+      ctx.ellipse(0, 20, e.width * 0.34, 16, this.frameCount * 0.04, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.ellipse(0, 0, 50, 10, -this.frameCount * 0.1, 0, Math.PI*2);
+      ctx.ellipse(0, 20, e.width * 0.24, 8, -this.frameCount * 0.04, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
       ctx.save();
       ctx.font = 'bold 16px Orbitron';
-      ctx.fillStyle = '#ff0000';
+      ctx.fillStyle = '#fb7185';
       ctx.textAlign = 'center';
-      ctx.fillText("GATEKEEPER", 0, -e.height/2 - 35);
+      ctx.fillText("GATEKEEPER PRIME", 0, -e.height/2 - 35);
       ctx.restore();
   }
 
@@ -1394,6 +1473,55 @@ export class GameEngine {
          ctx.fillRect(-20, -20, 40, 40);
        }
 
+    } else if (e.type === EntityType.ENEMY_DRONE) {
+        const frame = this.getAnimatedFrame(ASSETS.ENEMY_DRONE_FRAMES, e, 6);
+        const drewSprite = this.drawSprite(ctx, frame, e.width, e.height, {
+            shadowColor: '#38bdf8',
+            shadowBlur: 10
+        });
+        if (!drewSprite) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(-e.width / 2, -e.height / 2, e.width, e.height);
+        }
+
+    } else if (e.type === EntityType.ENEMY_SWARM) {
+        const frame = this.getAnimatedFrame(ASSETS.ENEMY_SWARM_FRAMES, e, 5);
+        const rotation = Math.sin((this.frameCount + e.variant) * 0.08) * 0.12;
+        const drewSprite = this.drawSprite(ctx, frame, e.width, e.height, {
+            rotation,
+            shadowColor: '#34d399',
+            shadowBlur: 8
+        });
+        if (!drewSprite) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(-e.width / 2, -e.height / 2, e.width, e.height);
+        }
+
+    } else if (e.type === EntityType.ENEMY_BRICK) {
+        const frame = ASSETS.ENEMY_BRICK_FRAMES[e.variant % ASSETS.ENEMY_BRICK_FRAMES.length];
+        const rotation = Math.sin((this.frameCount + e.variant) * 0.03) * 0.2;
+        const drewSprite = this.drawSprite(ctx, frame, e.width, e.height, {
+            rotation,
+            shadowColor: '#f59e0b',
+            shadowBlur: 6
+        });
+        if (!drewSprite) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(-e.width / 2, -e.height / 2, e.width, e.height);
+        }
+
+    } else if (e.type === EntityType.ENEMY_JOURNAL) {
+        const sway = Math.sin((this.frameCount + e.variant) * 0.04) * 0.12;
+        const drewSprite = this.drawSprite(ctx, ASSETS.ENEMY_JOURNAL, e.width, e.height, {
+            rotation: sway,
+            shadowColor: '#fb7185',
+            shadowBlur: 14
+        });
+        if (!drewSprite) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(-e.width / 2, -e.height / 2, e.width, e.height);
+        }
+
     } else if (e.type === EntityType.POWERUP) {
         const type = e.text as PowerupType;
         ctx.shadowBlur = 10;
@@ -1428,6 +1556,16 @@ export class GameEngine {
     } else if (e.type === EntityType.BOSS) {
         this.drawBoss(ctx, e);
     } else if (e.type === EntityType.ENEMY_INVADER) {
+        const sway = Math.sin((this.frameCount + e.variant) * 0.05) * 0.08;
+        const drewSprite = this.drawSprite(ctx, ASSETS.WALL_BOSS_SEGMENT, e.width, e.height, {
+            rotation: sway,
+            shadowColor: '#fb7185',
+            shadowBlur: 8
+        });
+        if (drewSprite) {
+            ctx.restore();
+            return;
+        }
         // DRAW AS BRICK EMOJI
         // INCREASE FONT SIZE FOR BIGGER BRICKS
         ctx.font = `${e.height}px Arial`; 
