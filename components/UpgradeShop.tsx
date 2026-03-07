@@ -102,13 +102,13 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
           <div className="scicon-node node-br-2"></div>
 
           <div className="relative z-10 flex flex-col gap-4 overflow-y-auto p-4 sm:p-5 md:p-6 custom-scrollbar">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="flex items-start gap-3">
                 <img src={ASSETS.REAL_RSC_ICON} className="h-14 w-14 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] sm:h-16 sm:w-16" alt="Research Coin" />
                 <div>
                   <h2 className="arcade-font text-2xl font-black leading-none tracking-widest text-white text-shadow-neon sm:text-3xl md:text-4xl">LABORATORY</h2>
                   <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.22em] text-indigo-300">
-                    Current-mission funding, upgrades, and Base swaps
+                    Compact funding and upgrades for the active run
                   </p>
                 </div>
               </div>
@@ -122,22 +122,18 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Wave</div>
-                <div className="mt-1 text-lg font-bold text-white">{stats.wave}</div>
+            <div className="flex flex-wrap gap-2">
+              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-gray-300">
+                Wave {stats.wave}
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Lives</div>
-                <div className="mt-1 text-lg font-bold text-white">{stats.lives}</div>
+              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-gray-300">
+                Lives {stats.lives}
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Wallet</div>
-                <div className="mt-1 text-sm font-bold text-cyan-200">{wallet.address ? 'Base Ready' : 'Connect Needed'}</div>
+              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200">
+                {wallet.address ? 'Base Ready' : 'Connect Needed'}
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Conversion</div>
-                <div className="mt-1 text-sm font-bold text-emerald-300">100 / 1 RSC</div>
+              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-300">
+                100 credits / 1 RSC
               </div>
             </div>
 
@@ -148,7 +144,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-emerald-300">Mission Funding</div>
                     <h3 className="mt-2 text-lg font-bold uppercase tracking-wide text-white">Top up this run with RSC</h3>
                     <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                      Each funding action sends RSC to the research wallet and mints temporary mission credits for this run only.
+                      Sends RSC to the research wallet and adds temporary mission credits for this game only.
                     </p>
                   </div>
 
@@ -162,18 +158,18 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   ) : null}
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   {fundingPackages.map((fundingPackage) => (
                     <button
                       key={fundingPackage.rsc}
                       onClick={() => onBuyMissionCredits(fundingPackage.rsc)}
                       disabled={labFundingStatus === 'switching_network' || labFundingStatus === 'processing' || labFundingStatus === 'confirming'}
-                      className="rounded-2xl border border-emerald-400/20 bg-black/40 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-400/10 disabled:cursor-wait disabled:opacity-60"
+                      className="rounded-2xl border border-emerald-400/20 bg-black/40 p-3 text-left transition hover:border-emerald-300 hover:bg-emerald-400/10 disabled:cursor-wait disabled:opacity-60"
                     >
                       <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300">
                         {fundingPackage.rsc} RSC
                       </div>
-                      <div className="mt-2 text-2xl font-black text-white">{fundingPackage.credits}</div>
+                      <div className="mt-1 text-xl font-black text-white">{fundingPackage.credits}</div>
                       <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">mission credits</div>
                     </button>
                   ))}
@@ -199,48 +195,30 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   </a>
                 ) : null}
 
-                <div className="group relative mt-5">
-                  <div className="absolute -inset-0.5 animate-pulse rounded bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 opacity-20 blur transition duration-1000 group-hover:opacity-60"></div>
-                  <div className="relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-black/90 p-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded border border-gray-700 bg-gray-900 animate-pulse">
-                          <span className="text-sm text-cyan-300">+</span>
-                        </div>
-                        <div className="text-left">
-                          <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-400">Promo Access</h3>
-                          <p className="text-[9px] uppercase text-gray-500">Enter a code for a supply drop</p>
-                        </div>
-                      </div>
+                <form onSubmit={handlePromoCode} className="mt-4 flex items-center gap-2 rounded-2xl border border-indigo-500/20 bg-black/35 p-3">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value);
+                      setPromoMessage(null);
+                    }}
+                    placeholder="PROMO CODE"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-900/80 px-3 py-2 text-center font-mono text-xs uppercase tracking-widest text-cyan-300 outline-none placeholder-gray-700 focus:border-cyan-500"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-xl border border-cyan-700/50 bg-cyan-900/50 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-all hover:bg-cyan-800"
+                  >
+                    Redeem
+                  </button>
+                </form>
 
-                      <form onSubmit={handlePromoCode} className="flex w-full items-center gap-2 sm:w-auto">
-                        <input
-                          type="text"
-                          value={promoCode}
-                          onChange={(e) => {
-                            setPromoCode(e.target.value);
-                            setPromoMessage(null);
-                          }}
-                          placeholder="ENTER CODE"
-                          className="w-full rounded border border-gray-600 bg-gray-900/80 px-3 py-2 text-center font-mono text-xs uppercase tracking-widest text-cyan-300 outline-none placeholder-gray-700 focus:border-cyan-500 sm:w-36"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded border border-cyan-700/50 bg-cyan-900/50 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-all hover:bg-cyan-800 hover:shadow-[0_0_10px_rgba(34,211,238,0.3)]"
-                        >
-                          Redeem
-                        </button>
-                      </form>
-                    </div>
-
-                    {promoMessage ? (
-                      <div className={`absolute inset-0 z-20 flex items-center justify-center bg-black/90 ${promoMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                        <span className="animate-bounce font-mono text-xs font-bold tracking-widest">{promoMessage.text}</span>
-                        {promoMessage.type === 'success' ? <div className="absolute inset-0 animate-pulse bg-green-500/10"></div> : null}
-                      </div>
-                    ) : null}
+                {promoMessage ? (
+                  <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${promoMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {promoMessage.text}
                   </div>
-                </div>
+                ) : null}
               </div>
 
               <LabSwapPanel
@@ -263,7 +241,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-colors hover:bg-white/10">
+                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
                   <div>
                     <div className="mb-2 flex items-start justify-between">
                       <div>
@@ -272,7 +250,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                       </div>
                       <div className="text-2xl opacity-50">I</div>
                     </div>
-                    <div className="mb-4 flex h-1.5 space-x-1">
+                    <div className="mb-3 flex h-1.5 space-x-1">
                       {[...Array(5)].map((_, i) => (
                         <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.fireRate ? 'bg-indigo-500' : 'bg-gray-800'}`}></div>
                       ))}
@@ -287,7 +265,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   </button>
                 </div>
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-colors hover:bg-white/10">
+                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
                   <div>
                     <div className="mb-2 flex items-start justify-between">
                       <div>
@@ -296,7 +274,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                       </div>
                       <div className="text-2xl opacity-50">+</div>
                     </div>
-                    <div className="mb-4 flex h-1.5 space-x-1">
+                    <div className="mb-3 flex h-1.5 space-x-1">
                       {[...Array(5)].map((_, i) => (
                         <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.speed ? 'bg-purple-500' : 'bg-gray-800'}`}></div>
                       ))}
@@ -311,7 +289,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   </button>
                 </div>
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-colors hover:bg-white/10">
+                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
                   <div>
                     <div className="mb-2 flex items-start justify-between">
                       <div>
@@ -320,7 +298,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                       </div>
                       <div className="text-2xl opacity-50">M</div>
                     </div>
-                    <div className="mb-4 flex h-1.5 space-x-1">
+                    <div className="mb-3 flex h-1.5 space-x-1">
                       {[...Array(5)].map((_, i) => (
                         <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.missile ? 'bg-blue-500' : 'bg-gray-800'}`}></div>
                       ))}
@@ -335,7 +313,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   </button>
                 </div>
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-colors hover:bg-white/10">
+                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
                   <div>
                     <div className="mb-2 flex items-start justify-between">
                       <div>
@@ -344,7 +322,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                       </div>
                       <div className="text-2xl opacity-50">H</div>
                     </div>
-                    <div className="mb-4 h-1.5 bg-transparent"></div>
+                    <div className="mb-3 h-1.5 bg-transparent"></div>
                   </div>
                   <button
                     disabled={stats.coins < getRepairCost()}

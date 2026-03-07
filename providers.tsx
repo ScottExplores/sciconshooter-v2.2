@@ -20,7 +20,7 @@ const builderDataSuffix = Attribution.toDataSuffix({
   codes: [DONATION_CONFIG.BUILDER_CODE]
 });
 
-export const onchainKitApiKey = import.meta.env.VITE_ONCHAINKIT_API_KEY as string | undefined;
+export const onchainKitApiKey = (import.meta.env.VITE_ONCHAINKIT_API_KEY as string | undefined) ?? '54f5d727-cc43-403e-9957-8664966d7141';
 
 export const wagmiConfig = createConfig({
   chains: [base],

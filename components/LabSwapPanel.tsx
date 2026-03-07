@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SwapDefault } from '@coinbase/onchainkit/swap';
 import type { Token } from '@coinbase/onchainkit/token';
 import { DONATION_CONFIG } from '../constants';
@@ -35,60 +35,72 @@ const LabSwapPanel: React.FC<LabSwapPanelProps> = ({
   isEmbeddedSwapEnabled,
   onConnectWallet,
   onOpenSwap
-}) => (
-  <div className="rounded-2xl border border-cyan-400/20 bg-cyan-950/15 p-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-300">Swap Desk</div>
-        <h3 className="mt-2 text-lg font-bold uppercase tracking-wide text-white">Swap into RSC on Base</h3>
-        <p className="mt-1 text-xs leading-relaxed text-slate-300">
-          Use USDC or RSC on Base, then fund the current mission. The external desk stays available as a fallback.
-        </p>
-      </div>
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
 
-      <button
-        onClick={onOpenSwap}
-        className="rounded-xl border border-cyan-400/30 bg-black/40 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200 transition hover:border-cyan-200 hover:bg-cyan-400/10"
-      >
-        Open Aerodrome
-      </button>
-    </div>
+  return (
+    <>
+      <div className="rounded-2xl border border-cyan-400/20 bg-cyan-950/15 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-300">Swap Desk</div>
+            <h3 className="mt-2 text-base font-bold uppercase tracking-wide text-white">Need more RSC?</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-300">
+              Open the embedded swap desk here, swap on Base, then come straight back to mission funding.
+            </p>
+          </div>
 
-    {!wallet.address ? (
-      <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4">
-        <div className="text-xs text-slate-300">
-          Connect with Base Account first so the lab can fund credits and route swaps on Base.
+          <button
+            onClick={() => (wallet.address ? setIsOpen(true) : onConnectWallet())}
+            className="rounded-xl border border-cyan-400/30 bg-black/40 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200 transition hover:border-cyan-200 hover:bg-cyan-400/10"
+          >
+            {wallet.address ? 'Open Swap' : wallet.status === 'connecting' ? 'Connecting...' : 'Connect'}
+          </button>
         </div>
-        <button
-          onClick={onConnectWallet}
-          className="scicon-btn mt-4 w-full py-3 text-sm font-bold"
-        >
-          {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT BASE ACCOUNT'}
-        </button>
-      </div>
-    ) : null}
 
-    {wallet.address && isEmbeddedSwapEnabled ? (
-      <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white p-2">
-        <SwapDefault
-          from={swapTokens}
-          to={swapTokens}
-          title="Swap Desk"
-          config={{ maxSlippage: 3 }}
-          experimental={{ useAggregator: true }}
-        />
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/35 px-3 py-2">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+            {wallet.address ? 'Embedded swap ready' : 'Connect wallet to enable embedded swap'}
+          </div>
+          <button
+            onClick={onOpenSwap}
+            className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300 underline underline-offset-2 hover:text-white"
+          >
+            Aerodrome fallback
+          </button>
+        </div>
       </div>
-    ) : null}
 
-    {wallet.address && !isEmbeddedSwapEnabled ? (
-      <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
-        <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-amber-200">Embedded Swap Offline</div>
-        <p className="mt-2 text-xs leading-relaxed text-slate-300">
-          Add <code>VITE_ONCHAINKIT_API_KEY</code> to enable the embedded swap panel. The Aerodrome route above is live now.
-        </p>
-      </div>
-    ) : null}
-  </div>
-);
+      {isOpen && wallet.address && isEmbeddedSwapEnabled ? (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-[28px] border border-cyan-400/20 bg-[#020816] p-3 shadow-[0_0_40px_rgba(34,211,238,0.1)]">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-300">Embedded Swap</div>
+                <div className="mt-1 text-sm font-bold uppercase tracking-[0.14em] text-white">Swap RSC on Base</div>
+              </div>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300 transition hover:border-white/30 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-white p-2">
+              <SwapDefault
+                from={swapTokens}
+                to={swapTokens}
+                title="Swap Desk"
+                config={{ maxSlippage: 3 }}
+                experimental={{ useAggregator: true }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+};
 
 export default LabSwapPanel;
