@@ -1,5 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { ethers } from 'ethers';
+import React, { useEffect, useRef, useState } from 'react';
+import { erc20Abi, parseUnits } from 'viem';
+import type { Address } from 'viem';
+import {
+  useAccount,
+  useChainId,
+  useConfig,
+  useConnect,
+  useConnectors,
+  useDisconnect,
+  useSwitchChain,
+  useWriteContract
+} from 'wagmi';
+import { waitForTransactionReceipt } from 'wagmi/actions';
 import GameCanvas from './components/GameCanvas';
 import StartScreen from './components/StartScreen';
 import UIOverlay from './components/UIOverlay';
@@ -11,17 +23,7 @@ import { audioService } from './services/audioService';
 import { ASSETS, DONATION_CONFIG, STORAGE_KEYS, UPGRADE_BASE_COSTS } from './constants';
 import { getScores, saveScore } from './services/leaderboardService';
 import { miniAppService } from './services/miniAppService';
-
-const RSC_ABI = [
-  "function transfer(address to, uint amount) returns (bool)"
-];
-
-const defaultWalletState: WalletSession = {
-  address: null,
-  chainId: null,
-  status: 'idle',
-  error: ''
-};
+import { onchainKitApiKey } from './providers';
 
 const defaultMiniAppState: MiniAppState = {
   isMiniApp: false,
@@ -29,6 +31,26 @@ const defaultMiniAppState: MiniAppState = {
   added: false,
   userFid: null,
   platformType: null
+};
+
+const defaultMissionUpgrades: Upgrades = {
+  fireRate: 0,
+  speed: 0,
+  missile: 0
+};
+
+const getUserFacingMessage = (error: any, fallback: string) => {
+  const message = error?.shortMessage || error?.message || fallback;
+
+  if (/rejected|denied|cancelled|canceled|closed modal|request rejected/i.test(message)) {
+    return fallback;
+  }
+
+  if (/insufficient/i.test(message)) {
+    return 'Not enough RSC or gas for that action.';
+  }
+
+  return message;
 };
 
 const App: React.FC = () => {
@@ -40,11 +62,31 @@ const App: React.FC = () => {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState<boolean>(false);
   const [isSubmittingScore, setIsSubmittingScore] = useState<boolean>(false);
   const [showLabGlow, setShowLabGlow] = useState<boolean>(true);
-  const [wallet, setWallet] = useState<WalletSession>(defaultWalletState);
   const [miniApp, setMiniApp] = useState<MiniAppState>(defaultMiniAppState);
+  const [walletError, setWalletError] = useState<string>('');
   const [donationStatus, setDonationStatus] = useState<DonationStatus>('idle');
   const [donationHash, setDonationHash] = useState<string>('');
   const [donationError, setDonationError] = useState<string>('');
+  const [labFundingStatus, setLabFundingStatus] = useState<DonationStatus>('idle');
+  const [labFundingHash, setLabFundingHash] = useState<string>('');
+  const [labFundingError, setLabFundingError] = useState<string>('');
+  const attemptedMiniAppConnect = useRef(false);
+
+  const { address, isConnected, isConnecting } = useAccount();
+  const chainId = useChainId();
+  const config = useConfig();
+  const connectors = useConnectors();
+  const { connectAsync, status: connectStatus } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
+
+  const wallet: WalletSession = {
+    address: address ?? null,
+    chainId: isConnected ? chainId : null,
+    status: isConnected ? 'connected' : (isConnecting || connectStatus === 'pending') ? 'connecting' : walletError ? 'error' : 'idle',
+    error: walletError
+  };
 
   useEffect(() => {
     const fetchScores = async () => {
@@ -70,7 +112,7 @@ const App: React.FC = () => {
     if (gameState === GameState.MENU || gameState === GameState.GAMEOVER) {
       fetchScores();
     }
-  }, [gameState]);
+  }, [gameState, leaderboard.length]);
 
   const getInitialStats = (): Stats => {
     const savedStats = localStorage.getItem(STORAGE_KEYS.PLAYER_STATS);
@@ -78,13 +120,15 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(savedStats);
         return {
-          ...parsed,
           score: 0,
+          highScore: parsed.highScore || 0,
           wave: 1,
-          coins: parsed.coins || 0,
+          coins: 0,
+          totalCoins: parsed.totalCoins || 0,
           enemiesDefeated: 0,
           lives: 3,
           repairsCount: 0,
+          upgrades: { ...defaultMissionUpgrades },
           bossProgress: 0,
           isBossActive: false,
           bossHp: 0,
@@ -104,11 +148,7 @@ const App: React.FC = () => {
       enemiesDefeated: 0,
       lives: 3,
       repairsCount: 0,
-      upgrades: {
-        fireRate: 0,
-        speed: 0,
-        missile: 0
-      },
+      upgrades: { ...defaultMissionUpgrades },
       bossProgress: 0,
       isBossActive: false,
       bossHp: 0,
@@ -116,59 +156,16 @@ const App: React.FC = () => {
     };
   };
 
-  const [stats, setStats] = useState<Stats>(getInitialStats());
+  const [stats, setStats] = useState<Stats>(getInitialStats);
 
   useEffect(() => {
     const statsToSave = {
       highScore: stats.highScore,
-      coins: stats.coins,
-      totalCoins: stats.totalCoins,
-      upgrades: stats.upgrades
+      totalCoins: stats.totalCoins
     };
     localStorage.setItem(STORAGE_KEYS.PLAYER_STATS, JSON.stringify(statsToSave));
     localStorage.setItem(STORAGE_KEYS.HIGH_SCORE, stats.highScore.toString());
-  }, [stats.highScore, stats.coins, stats.totalCoins, stats.upgrades]);
-
-  const syncWallet = async (runtime: MiniAppState = miniApp) => {
-    const ethereum = await miniAppService.getEthereumProvider();
-    if (!ethereum) {
-      setWallet(prev => ({
-        ...prev,
-        address: null,
-        chainId: null,
-        status: 'idle',
-        error: runtime.isMiniApp ? 'Open this from the Base app to use the embedded wallet.' : prev.error
-      }));
-      return;
-    }
-
-    try {
-      const provider = new ethers.BrowserProvider(ethereum as any);
-      const accounts = await provider.send('eth_accounts', []);
-      const network = await provider.getNetwork();
-
-      if (accounts.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
-        setWallet({
-          address: accounts[0],
-          chainId: Number(network.chainId),
-          status: 'connected',
-          error: ''
-        });
-        return;
-      }
-
-      localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
-      setWallet({
-        address: null,
-        chainId: Number(network.chainId),
-        status: 'idle',
-        error: runtime.isMiniApp ? 'Wallet access should come from the host mini app client.' : ''
-      });
-    } catch (error) {
-      console.error("Wallet sync failed", error);
-    }
-  };
+  }, [stats.highScore, stats.totalCoins]);
 
   useEffect(() => {
     let active = true;
@@ -181,63 +178,34 @@ const App: React.FC = () => {
       if (state.isMiniApp) {
         await miniAppService.ready();
       }
-
-      await syncWallet(state);
-
-      const injected = (window as any).ethereum;
-      if (!injected) {
-        return;
-      }
-
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
-          setWallet(prev => ({
-            ...prev,
-            address: null,
-            status: 'idle',
-            error: state.isMiniApp ? 'Wallet access should come from the host mini app client.' : ''
-          }));
-          return;
-        }
-
-        localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
-        setWallet(prev => ({
-          ...prev,
-          address: accounts[0],
-          status: 'connected',
-          error: ''
-        }));
-      };
-
-      const handleChainChanged = (chainIdHex: string) => {
-        const chainId = Number.parseInt(chainIdHex, 16);
-        setWallet(prev => ({
-          ...prev,
-          chainId,
-          status: prev.address ? 'connected' : 'idle'
-        }));
-      };
-
-      injected.on?.('accountsChanged', handleAccountsChanged);
-      injected.on?.('chainChanged', handleChainChanged);
-
-      return () => {
-        injected.removeListener?.('accountsChanged', handleAccountsChanged);
-        injected.removeListener?.('chainChanged', handleChainChanged);
-      };
     };
 
-    let cleanup: (() => void) | undefined;
-    setupMiniApp().then((dispose) => {
-      cleanup = dispose;
-    });
+    setupMiniApp();
 
     return () => {
       active = false;
-      cleanup?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!miniApp.isMiniApp || attemptedMiniAppConnect.current || isConnected) {
+      return;
+    }
+
+    const farcasterConnector = connectors.find((connector) => connector.id === 'farcaster');
+    if (!farcasterConnector) {
+      return;
+    }
+
+    attemptedMiniAppConnect.current = true;
+    connectAsync({
+      connector: farcasterConnector,
+      chainId: DONATION_CONFIG.BASE_CHAIN_ID
+    }).catch((error) => {
+      console.error("Mini app wallet connection failed", error);
+      setWalletError('Open this from a compatible Base mini app host to use the embedded wallet.');
+    });
+  }, [miniApp.isMiniApp, isConnected, connectors, connectAsync]);
 
   const startGame = () => {
     audioService.init();
@@ -249,11 +217,15 @@ const App: React.FC = () => {
       enemiesDefeated: 0,
       lives: 3,
       repairsCount: 0,
+      upgrades: { ...defaultMissionUpgrades },
       bossProgress: 0,
       isBossActive: false,
       bossHp: 0,
       bossMaxHp: 100
     }));
+    setLabFundingStatus('idle');
+    setLabFundingHash('');
+    setLabFundingError('');
     setShowNameInput(false);
     setPlayerNameInput('');
     setIsSubmittingScore(false);
@@ -310,127 +282,88 @@ const App: React.FC = () => {
     audioService.playSound('coin');
   };
 
-  const switchToBase = async (provider: ethers.BrowserProvider) => {
-    try {
-      await provider.send("wallet_switchEthereumChain", [{ chainId: DONATION_CONFIG.BASE_CHAIN_ID_HEX }]);
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
-        await provider.send("wallet_addEthereumChain", [{
-          chainId: DONATION_CONFIG.BASE_CHAIN_ID_HEX,
-          chainName: 'Base Mainnet',
-          nativeCurrency: {
-            name: 'ETH',
-            symbol: 'ETH',
-            decimals: 18
-          },
-          rpcUrls: ['https://mainnet.base.org'],
-          blockExplorerUrls: [DONATION_CONFIG.EXPLORER_BASE_URL]
-        }]);
-        return;
-      }
-
-      throw switchError;
-    }
-  };
-
   const connectWallet = async () => {
-    const ethereum = await miniAppService.getEthereumProvider();
-    if (!ethereum) {
-      setWallet({
-        address: null,
-        chainId: null,
-        status: 'error',
-        error: miniApp.isMiniApp ? 'Open this inside the Base app to access the mini app wallet.' : 'Install a wallet with Base support to connect.'
-      });
+    if (isConnected) {
+      setWalletError('');
       return;
     }
 
-    if (miniApp.isMiniApp) {
-      await syncWallet(miniApp);
+    const preferredConnector = miniApp.isMiniApp
+      ? connectors.find((connector) => connector.id === 'farcaster') ?? connectors.find((connector) => connector.id === 'baseAccount')
+      : connectors.find((connector) => connector.id === 'baseAccount') ?? connectors.find((connector) => connector.id === 'farcaster');
+
+    if (!preferredConnector) {
+      setWalletError('No compatible Base wallet connector is available.');
       return;
     }
-
-    setWallet(prev => ({ ...prev, status: 'connecting', error: '' }));
 
     try {
-      const provider = new ethers.BrowserProvider(ethereum as any);
-      const accounts = await provider.send('eth_requestAccounts', []);
-      const network = await provider.getNetwork();
-      localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
-      setWallet({
-        address: accounts[0],
-        chainId: Number(network.chainId),
-        status: 'connected',
-        error: ''
+      setWalletError('');
+      await connectAsync({
+        connector: preferredConnector,
+        chainId: DONATION_CONFIG.BASE_CHAIN_ID
       });
     } catch (error: any) {
-      const message = error?.message?.includes('user rejected') ? 'Wallet connection was cancelled.' : 'Wallet connection failed.';
-      setWallet({
-        address: null,
-        chainId: null,
-        status: 'error',
-        error: message
-      });
+      console.error("Wallet connection failed", error);
+      setWalletError(getUserFacingMessage(error, 'Wallet connection was cancelled.'));
     }
   };
 
   const disconnectWallet = () => {
     localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
-    setWallet(defaultWalletState);
+    disconnect();
+    setWalletError('');
     setDonationStatus('idle');
     setDonationHash('');
     setDonationError('');
+    setLabFundingStatus('idle');
+    setLabFundingHash('');
+    setLabFundingError('');
+  };
+
+  const ensureBaseConnection = async () => {
+    if (!isConnected || !address) {
+      await connectWallet();
+      return false;
+    }
+
+    if (chainId !== DONATION_CONFIG.BASE_CHAIN_ID) {
+      await switchChainAsync({ chainId: DONATION_CONFIG.BASE_CHAIN_ID });
+    }
+
+    return true;
   };
 
   const donateRsc = async (amount: number) => {
-    const ethereum = await miniAppService.getEthereumProvider();
-    if (!ethereum) {
-      setDonationStatus('error');
-      setDonationError('No wallet detected.');
-      return;
-    }
-
-    if (!wallet.address) {
-      await connectWallet();
-      return;
-    }
-
-    setDonationStatus('processing');
-    setDonationHash('');
     setDonationError('');
 
     try {
-      const provider = new ethers.BrowserProvider(ethereum as any);
-      const network = await provider.getNetwork();
-
-      if (Number(network.chainId) !== 8453) {
-        setDonationStatus('switching_network');
-        await switchToBase(provider);
+      const isReady = await ensureBaseConnection();
+      if (!isReady) {
+        return;
       }
 
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(DONATION_CONFIG.RSC_CONTRACT_ADDRESS, RSC_ABI, signer);
+      setDonationStatus(chainId === DONATION_CONFIG.BASE_CHAIN_ID ? 'processing' : 'switching_network');
+      setDonationHash('');
 
-      setDonationStatus('processing');
-      const tx = await contract.transfer(
-        DONATION_CONFIG.RECIPIENT_ADDRESS,
-        ethers.parseUnits(amount.toString(), 18)
-      );
+      const hash = await writeContractAsync({
+        abi: erc20Abi,
+        address: DONATION_CONFIG.RSC_CONTRACT_ADDRESS as Address,
+        functionName: 'transfer',
+        args: [
+          DONATION_CONFIG.RECIPIENT_ADDRESS as Address,
+          parseUnits(amount.toString(), 18)
+        ]
+      });
 
-      setDonationHash(tx.hash);
+      setDonationHash(hash);
       setDonationStatus('confirming');
 
-      const receipt = await tx.wait();
-      if (receipt.status !== 1) {
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      if (receipt.status !== 'success') {
         throw new Error('Donation transaction reverted.');
       }
 
-      const latestNetwork = await provider.getNetwork();
-      setWallet(prev => ({
-        ...prev,
-        chainId: Number(latestNetwork.chainId),
-        status: prev.address ? 'connected' : prev.status
-      }));
       setDonationStatus('success');
       setTimeout(() => {
         setDonationStatus('idle');
@@ -438,13 +371,57 @@ const App: React.FC = () => {
       }, 5000);
     } catch (error: any) {
       console.error("Donation error", error);
-      const message = error?.message?.includes('user rejected')
-        ? 'Donation cancelled.'
-        : error?.message?.includes('insufficient funds')
-          ? 'Not enough RSC or gas for that donation.'
-          : 'Donation failed.';
       setDonationStatus('error');
-      setDonationError(message);
+      setDonationError(getUserFacingMessage(error, 'Donation cancelled.'));
+    }
+  };
+
+  const fundCurrentMission = async (rscAmount: number) => {
+    setLabFundingError('');
+
+    try {
+      const isReady = await ensureBaseConnection();
+      if (!isReady) {
+        return;
+      }
+
+      setLabFundingStatus(chainId === DONATION_CONFIG.BASE_CHAIN_ID ? 'processing' : 'switching_network');
+      setLabFundingHash('');
+
+      const hash = await writeContractAsync({
+        abi: erc20Abi,
+        address: DONATION_CONFIG.RSC_CONTRACT_ADDRESS as Address,
+        functionName: 'transfer',
+        args: [
+          DONATION_CONFIG.RECIPIENT_ADDRESS as Address,
+          parseUnits(rscAmount.toString(), 18)
+        ]
+      });
+
+      setLabFundingHash(hash);
+      setLabFundingStatus('confirming');
+
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      if (receipt.status !== 'success') {
+        throw new Error('Funding transaction reverted.');
+      }
+
+      const credits = rscAmount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC;
+      setStats(prev => ({
+        ...prev,
+        coins: prev.coins + credits
+      }));
+      audioService.playSound('coin');
+      setLabFundingStatus('success');
+
+      setTimeout(() => {
+        setLabFundingStatus('idle');
+        setLabFundingHash('');
+      }, 5000);
+    } catch (error: any) {
+      console.error("Lab funding error", error);
+      setLabFundingStatus('error');
+      setLabFundingError(getUserFacingMessage(error, 'Funding cancelled.'));
     }
   };
 
@@ -519,6 +496,10 @@ const App: React.FC = () => {
 
   const openReferral = async () => {
     await miniAppService.openUrl(ASSETS.REFERRAL_LINK);
+  };
+
+  const openSwap = async () => {
+    await miniAppService.openUrl(DONATION_CONFIG.AERODROME_SWAP_URL);
   };
 
   const pubStatus = getPubStatus(stats.score);
@@ -607,6 +588,12 @@ const App: React.FC = () => {
           onDeposit={handleDeposit}
           onClose={() => setGameState(GameState.PLAYING)}
           onConnectWallet={connectWallet}
+          onBuyMissionCredits={fundCurrentMission}
+          onOpenSwap={openSwap}
+          labFundingStatus={labFundingStatus}
+          labFundingHash={labFundingHash}
+          labFundingError={labFundingError}
+          isEmbeddedSwapEnabled={Boolean(onchainKitApiKey)}
           gameId={gameId}
         />
       )}
@@ -730,11 +717,11 @@ const App: React.FC = () => {
                   </ul>
                 </div>
                 <div>
-                  <strong className="text-indigo-400">RESOURCES:</strong>
+                  <strong className="text-indigo-400">LAB FLOW:</strong>
                   <ul className="mt-1 list-inside list-disc space-y-1 pl-2">
-                    <li><span className="text-yellow-300">RSC Tokens:</span> Collect them during the mission, then spend them in the lab.</li>
-                    <li><span className="text-cyan-300">Wallet Donations:</span> Optional support only. They do not buy gameplay upgrades.</li>
-                    <li><span className="text-purple-400">Founders:</span> Special power-ups like shields, spread fire, and magnets.</li>
+                    <li><span className="text-yellow-300">Mission Credits:</span> Collect them in-run or fund more at 100 credits per 1 RSC.</li>
+                    <li><span className="text-cyan-300">Base Account:</span> Connect once so the lab can swap and fund the active run.</li>
+                    <li><span className="text-purple-400">Current Game Only:</span> Lab funding and upgrades reset when the next mission starts.</li>
                   </ul>
                 </div>
                 <p className="mt-4 border-t border-gray-700 pt-2 text-xs italic text-gray-500">

@@ -73,11 +73,17 @@ export const PANTRY_CONFIG = {
 };
 
 export const DONATION_CONFIG = {
+  BUILDER_CODE: "bc_ww78gi4f",
   RECIPIENT_ADDRESS: "0x3A8D692Aabdd4981080a8F6af8375a21359464Bf",
   RSC_CONTRACT_ADDRESS: "0xfbb75a59193a3525a8825bebe7d4b56899e2f7e1",
+  USDC_CONTRACT_ADDRESS: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  BASE_CHAIN_ID: 8453,
   BASE_CHAIN_ID_HEX: "0x2105",
+  BASE_RPC_URL: "https://mainnet.base.org",
   EXPLORER_BASE_URL: "https://basescan.org",
-  PRESET_RSC_AMOUNTS: [1, 5, 10]
+  PRESET_RSC_AMOUNTS: [1, 5, 10],
+  MISSION_CREDITS_PER_RSC: 100,
+  AERODROME_SWAP_URL: "https://aerodrome.finance/swap?from=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913&to=0xfbb75a59193a3525a8825bebe7d4b56899e2f7e1&chain0=8453&chain1=8453"
 };
 
 export const STORAGE_KEYS = {

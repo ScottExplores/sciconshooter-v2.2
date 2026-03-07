@@ -34,9 +34,9 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
     <div className="w-full rounded border border-cyan-500/20 bg-cyan-950/20 p-3 md:p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Wallet Support</h3>
+          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Base Account Access</h3>
           <p className="mt-1 text-[10px] text-gray-400">
-            Upgrades spend only in-game RSC. Wallet use is optional and only for donations.
+            Connect once so the lab can swap into RSC, fund mission credits, and optionally send a support tip.
           </p>
         </div>
         {isConnected ? (
@@ -61,7 +61,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
             </div>
           ) : (
             <div className="mt-1 text-xs text-gray-300">
-              {wallet.error || (isMiniApp ? 'Inside the mini app, the host wallet should be provided automatically.' : 'Connect once, then send an optional RSC tip in two taps.')}
+              {wallet.error || (isMiniApp ? 'Inside the mini app, the host wallet should be available through the client.' : 'Use Base Account for the fastest login, then the lab can fund current-mission credits on demand.')}
             </div>
           )}
         </div>
@@ -71,7 +71,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
             onClick={onConnect}
             className="scicon-btn w-full py-2 text-xs font-bold md:w-auto md:px-6"
           >
-            {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT WALLET'}
+            {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT BASE ACCOUNT'}
           </button>
         ) : null}
       </div>
@@ -97,7 +97,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
             {donationStatus === 'confirming' && <span className="text-yellow-300">Waiting for confirmation...</span>}
             {donationStatus === 'success' && <span className="text-emerald-300">Donation confirmed. Thank you.</span>}
             {donationStatus === 'error' && <span className="text-red-300">{donationError}</span>}
-            {donationStatus === 'idle' && <span className="text-gray-500">Support is separate from gameplay balance and never buys upgrades.</span>}
+            {donationStatus === 'idle' && <span className="text-gray-500">Tips are optional. Lab purchases still use their own current-mission funding flow.</span>}
           </div>
 
           {donationHash ? (

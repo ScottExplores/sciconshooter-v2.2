@@ -7,10 +7,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@base-org/account": "^2.5.2",
+    "@coinbase/onchainkit": "^0.38.19",
     "@farcaster/miniapp-sdk": "^0.2.3",
+    "@farcaster/miniapp-wagmi-connector": "^1.1.1",
+    "@tanstack/react-query": "^5.90.21",
     "ethers": "^6.11.1",
+    "ox": "^0.14.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "viem": "^2.47.0",
+    "wagmi": "^2.16.8"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
