@@ -80,7 +80,9 @@ const readStoredScores = (key: string): LeaderboardEntry[] => {
     const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? dedupeAndSort(parsed, LOCAL_ARCHIVE_LIMIT) : [];
+    return Array.isArray(parsed)
+      ? dedupeAndSort(parsed, LOCAL_ARCHIVE_LIMIT).filter((score) => !isDefaultSeedEntry(score))
+      : [];
   } catch (error) {
     console.error(`Failed to parse ${key}`, error);
     return [];
