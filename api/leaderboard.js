@@ -1,5 +1,7 @@
 const MAX_SCORES = 25;
+const SYNC_SCORE_LIMIT = 100;
 const LEADERBOARD_KEY = process.env.LEADERBOARD_KV_KEY || 'scicon-shooter:leaderboard';
+const SUPABASE_TABLE = process.env.SUPABASE_LEADERBOARD_TABLE || 'scicon_leaderboard';
 
 const DEFAULT_SCORES = [
   { name: 'BRIAN', score: 100, wave: 2 },
@@ -33,6 +35,21 @@ const getRedisConfig = () => ({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
 });
+
+const getSupabaseConfig = () => ({
+  url: process.env.SUPABASE_URL,
+  key: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+});
+
+const hasRedisConfig = () => {
+  const { url, token } = getRedisConfig();
+  return Boolean(url && token);
+};
+
+const hasSupabaseConfig = () => {
+  const { url, key } = getSupabaseConfig();
+  return Boolean(url && key);
+};
 
 const sendJson = (res, status, payload) => {
   res.statusCode = status;
@@ -103,7 +120,7 @@ const redisCommand = async (command) => {
   return response.json();
 };
 
-const readScores = async () => {
+const readRedisScores = async () => {
   const data = await redisCommand(['GET', LEADERBOARD_KEY]);
   if (!data.result) {
     return dedupeAndSort(DEFAULT_SCORES);
@@ -114,10 +131,103 @@ const readScores = async () => {
   return dedupeAndSort(Array.isArray(scores) ? scores : DEFAULT_SCORES);
 };
 
-const writeScores = async (scores) => {
+const writeRedisScores = async (scores) => {
   const topScores = dedupeAndSort(scores);
   await redisCommand(['SET', LEADERBOARD_KEY, JSON.stringify({ scores: topScores })]);
   return topScores;
+};
+
+const supabaseUrl = (path) => {
+  const { url } = getSupabaseConfig();
+  return `${url.replace(/\/$/, '')}/rest/v1/${path}`;
+};
+
+const supabaseHeaders = (extraHeaders = {}) => {
+  const { key } = getSupabaseConfig();
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+    ...extraHeaders
+  };
+};
+
+const toSupabaseRow = (entry) => ({
+  name: entry.name,
+  score: entry.score,
+  wave: entry.wave,
+  date: entry.date,
+  wallet_address: entry.walletAddress || null,
+  donated: Boolean(entry.donated)
+});
+
+const fromSupabaseRow = (row) => sanitizeEntry({
+  name: row.name,
+  score: row.score,
+  wave: row.wave,
+  date: row.date,
+  walletAddress: row.wallet_address,
+  donated: row.donated
+});
+
+const readSupabaseScores = async () => {
+  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=name,score,wave,date,wallet_address,donated&order=score.desc,date.desc&limit=${MAX_SCORES}`), {
+    headers: supabaseHeaders()
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Supabase leaderboard fetch failed with ${response.status}: ${details}`);
+  }
+
+  const rows = await response.json();
+  const scores = Array.isArray(rows) ? rows.map(fromSupabaseRow).filter(Boolean) : [];
+  return scores.length > 0 ? dedupeAndSort(scores) : dedupeAndSort(DEFAULT_SCORES);
+};
+
+const writeSupabaseScores = async (scores) => {
+  const rows = dedupeAndSort(scores, SYNC_SCORE_LIMIT).map(toSupabaseRow);
+
+  if (rows.length > 0) {
+    const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?on_conflict=name,score,wave,date`), {
+      method: 'POST',
+      headers: supabaseHeaders({
+        Prefer: 'resolution=ignore-duplicates,return=minimal'
+      }),
+      body: JSON.stringify(rows)
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Supabase leaderboard save failed with ${response.status}: ${details}`);
+    }
+  }
+
+  return readSupabaseScores();
+};
+
+const readScores = async () => {
+  if (hasSupabaseConfig()) {
+    return readSupabaseScores();
+  }
+
+  if (hasRedisConfig()) {
+    return readRedisScores();
+  }
+
+  throw new Error('Missing leaderboard storage config. Add Supabase env vars or KV/Upstash env vars.');
+};
+
+const writeScores = async (scores) => {
+  if (hasSupabaseConfig()) {
+    return writeSupabaseScores(scores);
+  }
+
+  if (hasRedisConfig()) {
+    return writeRedisScores(scores);
+  }
+
+  throw new Error('Missing leaderboard storage config. Add Supabase env vars or KV/Upstash env vars.');
 };
 
 const parseBody = (body) => {
