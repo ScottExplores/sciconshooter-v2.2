@@ -1,7 +1,7 @@
-import { PANTRY_CONFIG, STORAGE_KEYS } from '../constants';
+import { STORAGE_KEYS } from '../constants';
 import { LeaderboardEntry } from '../types';
 
-const BASE_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_CONFIG.ID}/basket/${PANTRY_CONFIG.BASKET_NAME}`;
+const API_URL = (import.meta.env.VITE_LEADERBOARD_API_URL as string | undefined)?.trim() || '/api/leaderboard';
 const MAX_SCORES = 25;
 const LOCAL_ARCHIVE_LIMIT = 100;
 
@@ -42,7 +42,9 @@ const sanitizeEntry = (entry: Partial<LeaderboardEntry> | null | undefined): Lea
     name: entry.name.trim().substring(0, 15).toUpperCase(),
     score: Math.max(0, Math.floor(entry.score)),
     wave: typeof entry.wave === 'number' ? Math.max(1, Math.floor(entry.wave)) : 1,
-    date: entry.date || new Date().toISOString()
+    date: entry.date || new Date().toISOString(),
+    walletAddress: typeof entry.walletAddress === 'string' ? entry.walletAddress.toLowerCase() : undefined,
+    donated: Boolean(entry.donated)
   };
 };
 
@@ -86,28 +88,58 @@ const mergeScores = (...scoreGroups: LeaderboardEntry[][]): LeaderboardEntry[] =
   return dedupeAndSort(scoreGroups.flat(), LOCAL_ARCHIVE_LIMIT);
 };
 
+const readRemoteScores = async (): Promise<LeaderboardEntry[]> => {
+  const response = await fetch(API_URL, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Leaderboard fetch failed with ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Leaderboard endpoint did not return JSON');
+  }
+
+  const data = await response.json();
+  return Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+};
+
+const writeRemoteScores = async (entry: LeaderboardEntry | null, scores: LeaderboardEntry[] = []): Promise<LeaderboardEntry[]> => {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ entry, scores })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Leaderboard save failed with ${response.status}`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+};
+
 export const getScores = async (): Promise<LeaderboardEntry[]> => {
   const localArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
   const offlineTop = readStoredScores(STORAGE_KEYS.OFFLINE_SCORES);
 
   try {
-    const response = await fetch(BASE_URL, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
+    let remoteScores = await readRemoteScores();
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        const mergedFallback = dedupeAndSort([...localArchive, ...offlineTop, ...DEFAULT_SCORES], MAX_SCORES);
-        writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, mergedFallback);
-        return mergedFallback;
+    if (localArchive.length > 0 || offlineTop.length > 0) {
+      try {
+        remoteScores = await writeRemoteScores(null, mergeScores(localArchive, offlineTop));
+      } catch (syncError) {
+        console.error("Failed to sync local leaderboard archive", syncError);
       }
-
-      throw new Error("Failed to fetch from Pantry");
     }
 
-    const data = await response.json();
-    const remoteScores = Array.isArray(data.scores) ? data.scores : [];
     const mergedScores = mergeScores(remoteScores, localArchive, offlineTop, DEFAULT_SCORES);
     const topScores = mergedScores.slice(0, MAX_SCORES);
 
@@ -123,12 +155,19 @@ export const getScores = async (): Promise<LeaderboardEntry[]> => {
   }
 };
 
-export const saveScore = async (name: string, score: number, wave: number): Promise<LeaderboardEntry[]> => {
+export const saveScore = async (
+  name: string,
+  score: number,
+  wave: number,
+  options: { walletAddress?: string | null; donated?: boolean } = {}
+): Promise<LeaderboardEntry[]> => {
   const newEntry: LeaderboardEntry = {
     name: name.trim().substring(0, 15).toUpperCase(),
-    score,
-    wave,
-    date: new Date().toISOString()
+    score: Math.max(0, Math.floor(score)),
+    wave: Math.max(1, Math.floor(wave)),
+    date: new Date().toISOString(),
+    walletAddress: options.walletAddress ? options.walletAddress.toLowerCase() : undefined,
+    donated: Boolean(options.donated)
   };
 
   const currentLocalArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
@@ -136,20 +175,9 @@ export const saveScore = async (name: string, score: number, wave: number): Prom
   writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, nextLocalArchive.slice(0, LOCAL_ARCHIVE_LIMIT));
 
   try {
-    const response = await fetch(BASE_URL, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    const remoteScores = response.ok ? (await response.json()).scores || [] : [];
+    const remoteScores = await writeRemoteScores(newEntry, nextLocalArchive);
     const mergedScores = mergeScores(remoteScores, nextLocalArchive, DEFAULT_SCORES);
     const topScores = mergedScores.slice(0, MAX_SCORES);
-
-    await fetch(BASE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scores: topScores })
-    });
 
     writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, mergedScores.slice(0, LOCAL_ARCHIVE_LIMIT));
     writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, topScores);

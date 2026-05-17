@@ -7,9 +7,10 @@ interface GameCanvasProps {
   setGameState: (state: GameState) => void;
   stats: Stats;
   gameState: GameState;
+  isTransmissionOpen?: boolean;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, gameState }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, gameState, isTransmissionOpen = false }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const requestRef = useRef<number | null>(null);
@@ -17,11 +18,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
   
   // Use a ref to track gameState inside the animation loop closure
   const gameStateRef = useRef(gameState);
+  const isTransmissionOpenRef = useRef(isTransmissionOpen);
 
   // Sync the ref whenever the prop changes
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  useEffect(() => {
+    isTransmissionOpenRef.current = isTransmissionOpen;
+  }, [isTransmissionOpen]);
 
   // Sync Stats (specifically upgrades/coins modified by React UI) to Engine
   useEffect(() => {
@@ -105,7 +111,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
           lastTimeRef.current = timestamp - (deltaTime % frameInterval);
 
           // Use the REF current value to check state, avoiding stale closure issues
-          if (gameStateRef.current === GameState.PLAYING) {
+          if (gameStateRef.current === GameState.PLAYING && !isTransmissionOpenRef.current) {
             engine.update();
           }
 

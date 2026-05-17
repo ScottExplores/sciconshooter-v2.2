@@ -51,6 +51,8 @@ export interface LeaderboardEntry {
   score: number;
   wave?: number; // Optional for backward compatibility with old data
   date?: string; // New field for JSONBin data
+  walletAddress?: string;
+  donated?: boolean;
 }
 
 export interface Stats {
@@ -77,6 +79,8 @@ export interface WalletSession {
   chainId: number | null;
   status: WalletConnectionStatus;
   error: string;
+  connectorName?: string;
+  hasDonated?: boolean;
 }
 
 export interface MiniAppState {

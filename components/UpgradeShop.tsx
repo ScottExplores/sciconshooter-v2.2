@@ -1,22 +1,18 @@
 import React, { useState } from 'react';
-import { MiniAppState, Stats, Upgrades, WalletSession, DonationStatus } from '../types';
-import { UPGRADE_BASE_COSTS, ASSETS, DONATION_CONFIG } from '../constants';
-import LabSwapPanel from './LabSwapPanel';
+import { DonationStatus, Stats, Upgrades, WalletSession } from '../types';
+import { ASSETS, DONATION_CONFIG, UPGRADE_BASE_COSTS } from '../constants';
 
 interface UpgradeShopProps {
   stats: Stats;
   wallet: WalletSession;
-  miniApp: MiniAppState;
   onUpgrade: (type: keyof Upgrades | 'repair') => void;
   onDeposit: (coins: number) => void;
   onClose: () => void;
   onConnectWallet: () => void;
   onBuyMissionCredits: (rscAmount: number) => void;
-  onOpenSwap: () => void;
   labFundingStatus: DonationStatus;
   labFundingHash: string;
   labFundingError: string;
-  isEmbeddedSwapEnabled: boolean;
   gameId: number;
 }
 
@@ -24,6 +20,36 @@ const fundingPackages = DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => ({
   rsc: amount,
   credits: amount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC
 }));
+
+const upgradeCopy: Record<keyof Upgrades, { title: string; tag: string; description: string; color: string }> = {
+  fireRate: {
+    title: 'Rapid Review',
+    tag: 'Fire rate',
+    description: 'More shots. More pressure.',
+    color: 'indigo'
+  },
+  speed: {
+    title: 'Velocity Grant',
+    tag: 'Handling',
+    description: 'Sharper movement for tight dodges.',
+    color: 'cyan'
+  },
+  missile: {
+    title: 'Proton Missiles',
+    tag: 'Auto lock',
+    description: 'Adds homing support fire.',
+    color: 'blue'
+  }
+};
+
+const statusText: Record<DonationStatus, string> = {
+  idle: 'Confirmed transfers add credits to this mission.',
+  switching_network: 'Switching to Base...',
+  processing: 'Confirm the RSC transfer in your wallet.',
+  confirming: 'Waiting for Base confirmation...',
+  success: 'Credits added.',
+  error: ''
+};
 
 const UpgradeShop: React.FC<UpgradeShopProps> = ({
   stats,
@@ -33,48 +59,13 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   onClose,
   onConnectWallet,
   onBuyMissionCredits,
-  onOpenSwap,
   labFundingStatus,
   labFundingHash,
   labFundingError,
-  isEmbeddedSwapEnabled,
   gameId
 }) => {
-  const [promoCode, setPromoCode] = useState("");
+  const [promoCode, setPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-
-  const handlePromoCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = promoCode.trim().toUpperCase();
-    if (!code) return;
-
-    if (code === "EXPLORES") {
-      const storageKey = `scicon_promo_explores_${gameId}`;
-      if (sessionStorage.getItem(storageKey)) {
-        setPromoMessage({ text: "ALREADY REDEEMED THIS MISSION", type: 'error' });
-        setTimeout(() => setPromoMessage(null), 2000);
-        return;
-      }
-
-      onDeposit(100);
-      sessionStorage.setItem(storageKey, "true");
-      setPromoMessage({ text: "ACCESS GRANTED: +100 CREDITS", type: 'success' });
-      setPromoCode("");
-      setTimeout(() => setPromoMessage(null), 3000);
-      return;
-    }
-
-    if (code === "HUMANITY") {
-      onDeposit(1000);
-      setPromoMessage({ text: "HUMANITY FUNDING: +1000 CREDITS", type: 'success' });
-      setPromoCode("");
-      setTimeout(() => setPromoMessage(null), 3000);
-      return;
-    }
-
-    setPromoMessage({ text: "INVALID ACCESS CODE", type: 'error' });
-    setTimeout(() => setPromoMessage(null), 2000);
-  };
 
   const getCost = (type: keyof Upgrades) => {
     const level = stats.upgrades[type];
@@ -86,102 +77,121 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
     return UPGRADE_BASE_COSTS.repair + (repairs * 5);
   };
 
+  const handlePromoCode = (event: React.FormEvent) => {
+    event.preventDefault();
+    const code = promoCode.trim().toUpperCase();
+    if (!code) return;
+
+    if (code === 'EXPLORES') {
+      const storageKey = `scicon_promo_explores_${gameId}`;
+      if (sessionStorage.getItem(storageKey)) {
+        setPromoMessage({ text: 'Already redeemed this mission', type: 'error' });
+        setTimeout(() => setPromoMessage(null), 2000);
+        return;
+      }
+
+      onDeposit(100);
+      sessionStorage.setItem(storageKey, 'true');
+      setPromoMessage({ text: '+100 mission credits', type: 'success' });
+      setPromoCode('');
+      setTimeout(() => setPromoMessage(null), 2500);
+      return;
+    }
+
+    if (code === 'HUMANITY') {
+      onDeposit(1000);
+      setPromoMessage({ text: '+1000 mission credits', type: 'success' });
+      setPromoCode('');
+      setTimeout(() => setPromoMessage(null), 2500);
+      return;
+    }
+
+    setPromoMessage({ text: 'Invalid access code', type: 'error' });
+    setTimeout(() => setPromoMessage(null), 2000);
+  };
+
+  const isFundingBusy = labFundingStatus === 'switching_network' || labFundingStatus === 'processing' || labFundingStatus === 'confirming';
+  const canBuyAnyUpgrade = (Object.keys(upgradeCopy) as Array<keyof Upgrades>).some((type) => stats.coins >= getCost(type) && stats.upgrades[type] < 5) || stats.coins >= getRepairCost();
+
   return (
-    <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-md">
+    <div className="absolute inset-0 z-30 bg-black/82 backdrop-blur-md">
       <div className="mx-auto flex h-full w-full max-w-5xl items-start justify-center overflow-y-auto p-2 sm:p-4">
-        <div className="relative my-2 flex w-full max-w-4xl flex-col p-1">
-          <div className="scicon-border-container"></div>
-          <div className="scicon-inner-bg"></div>
-          <div className="scicon-node node-tl-1"></div>
-          <div className="scicon-node node-tl-2"></div>
-          <div className="scicon-node node-tr-1"></div>
-          <div className="scicon-node node-tr-2"></div>
-          <div className="scicon-node node-bl-1"></div>
-          <div className="scicon-node node-bl-2"></div>
-          <div className="scicon-node node-br-1"></div>
-          <div className="scicon-node node-br-2"></div>
+        <div className="relative my-2 flex w-full max-w-4xl flex-col overflow-hidden border border-cyan-300/20 bg-slate-950/92 shadow-[0_26px_90px_rgba(0,0,0,0.6)] [clip-path:polygon(18px_0,100%_0,100%_92%,96%_100%,0_100%,0_18px)]">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent"></div>
 
           <div className="relative z-10 flex flex-col gap-4 overflow-y-auto p-4 sm:p-5 md:p-6 custom-scrollbar">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="flex items-start gap-3">
-                <img src={ASSETS.REAL_RSC_ICON} className="h-14 w-14 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] sm:h-16 sm:w-16" alt="Research Coin" />
+                <div className="grid h-14 w-14 place-items-center border border-cyan-300/25 bg-cyan-300/10 shadow-[0_0_24px_rgba(34,211,238,0.12)] [clip-path:polygon(20%_0,80%_0,100%_20%,100%_80%,80%_100%,20%_100%,0_80%,0_20%)] sm:h-16 sm:w-16">
+                  <svg viewBox="0 0 64 64" className="h-10 w-10 text-cyan-100" aria-hidden="true">
+                    <path d="M25 7h14v7l-4 5v9l16 19c3 4 0 10-5 10H18c-5 0-8-6-5-10l16-19v-9l-4-5V7Z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+                    <path d="M22 43h20M27 28h10M25 49h14" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                  </svg>
+                </div>
                 <div>
-                  <h2 className="arcade-font text-2xl font-black leading-none tracking-widest text-white text-shadow-neon sm:text-3xl md:text-4xl">LABORATORY</h2>
-                  <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.22em] text-indigo-300">
-                    Compact funding and upgrades for the active run
+                  <h2 className="arcade-font text-2xl font-black leading-none tracking-widest text-white sm:text-3xl md:text-4xl">LAB BAY</h2>
+                  <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.22em] text-cyan-200/75">
+                    Fund. Upgrade. Return.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-indigo-500/30 bg-indigo-900/40 px-4 py-3">
-                <span className="block text-[10px] font-bold uppercase tracking-[0.24em] text-indigo-300">Mission Credits</span>
+              <div className={`border px-4 py-3 ${canBuyAnyUpgrade ? 'border-yellow-300/40 bg-yellow-300/10' : 'border-cyan-300/20 bg-cyan-950/25'}`}>
+                <span className="block text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">Mission Credits</span>
                 <div className="mt-1 flex items-center gap-2">
-                  <img src="https://www.researchhub.com/icons/gold2.svg" className="h-5 w-5" alt="RSC" />
+                  <img src={ASSETS.RSC_TOKEN} className="h-5 w-5" alt="RSC" />
                   <span className="font-mono text-2xl font-bold text-white">{stats.coins}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-gray-300">
-                Wave {stats.wave}
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-gray-300">
-                Lives {stats.lives}
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200">
-                {wallet.address ? 'Base Ready' : 'Connect Needed'}
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-                100 credits / 1 RSC
-              </div>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-950/15 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+              <section className="border border-emerald-300/20 bg-emerald-300/8 p-4 [clip-path:polygon(12px_0,100%_0,100%_90%,96%_100%,0_100%,0_12px)]">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-emerald-300">Mission Funding</div>
-                    <h3 className="mt-2 text-lg font-bold uppercase tracking-wide text-white">Top up this run with RSC</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                      Sends RSC to the research wallet and adds temporary mission credits for this game only.
-                    </p>
+                    <div className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-200">RSC Funding</div>
+                    <h3 className="mt-2 text-base font-bold uppercase tracking-wide text-white">Mission credits</h3>
                   </div>
 
                   {!wallet.address ? (
                     <button
                       onClick={onConnectWallet}
-                      className="rounded-xl border border-cyan-400/30 bg-black/40 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200 transition hover:border-cyan-200 hover:bg-cyan-400/10"
+                      className="border border-cyan-300/30 bg-black/40 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100 transition hover:border-cyan-100"
                     >
-                      {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT'}
+                      {wallet.status === 'connecting' ? 'Connecting' : 'Connect'}
                     </button>
-                  ) : null}
+                  ) : (
+                    <span className="border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-emerald-100">
+                      Base ready
+                    </span>
+                  )}
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   {fundingPackages.map((fundingPackage) => (
                     <button
                       key={fundingPackage.rsc}
-                      onClick={() => onBuyMissionCredits(fundingPackage.rsc)}
-                      disabled={labFundingStatus === 'switching_network' || labFundingStatus === 'processing' || labFundingStatus === 'confirming'}
-                      className="rounded-2xl border border-emerald-400/20 bg-black/40 p-3 text-left transition hover:border-emerald-300 hover:bg-emerald-400/10 disabled:cursor-wait disabled:opacity-60"
+                      onClick={() => (wallet.address ? onBuyMissionCredits(fundingPackage.rsc) : onConnectWallet())}
+                      disabled={isFundingBusy}
+                      className="border border-emerald-300/20 bg-black/38 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-300/10 disabled:cursor-wait disabled:opacity-60"
                     >
-                      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300">
+                      <div className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200">
                         {fundingPackage.rsc} RSC
                       </div>
                       <div className="mt-1 text-xl font-black text-white">{fundingPackage.credits}</div>
-                      <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">mission credits</div>
+                      <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">credits</div>
                     </button>
                   ))}
                 </div>
 
-                <div className="mt-4 min-h-5 text-[10px] uppercase tracking-[0.18em]">
-                  {labFundingStatus === 'switching_network' && <span className="text-yellow-300">Switching to Base...</span>}
-                  {labFundingStatus === 'processing' && <span className="text-cyan-300">Check wallet to sign the RSC transfer.</span>}
-                  {labFundingStatus === 'confirming' && <span className="text-yellow-300">Waiting for the funding transfer to confirm...</span>}
-                  {labFundingStatus === 'success' && <span className="text-emerald-300">Mission credits added for this run.</span>}
-                  {labFundingStatus === 'error' && <span className="text-red-300">{labFundingError}</span>}
-                  {labFundingStatus === 'idle' && <span className="text-gray-500">Funding only affects the active mission. Restarting begins from zero again.</span>}
+                <div className="mt-4 min-h-5 font-mono text-[10px] uppercase tracking-[0.16em]">
+                  {labFundingStatus === 'error' ? (
+                    <span className="text-red-300">{labFundingError}</span>
+                  ) : (
+                    <span className={labFundingStatus === 'success' ? 'text-emerald-200' : 'text-slate-400'}>
+                      {statusText[labFundingStatus]}
+                    </span>
+                  )}
                 </div>
 
                 {labFundingHash ? (
@@ -189,157 +199,117 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     href={`${DONATION_CONFIG.EXPLORER_BASE_URL}/tx/${labFundingHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 inline-block text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300 underline underline-offset-2 hover:text-white"
+                    className="mt-2 inline-block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-300 underline underline-offset-2 hover:text-white"
                   >
-                    View funding tx on BaseScan
+                    View tx on BaseScan
                   </a>
                 ) : null}
 
-                <form onSubmit={handlePromoCode} className="mt-4 flex items-center gap-2 rounded-2xl border border-indigo-500/20 bg-black/35 p-3">
+                <form onSubmit={handlePromoCode} className="mt-4 flex items-center gap-2 border border-white/10 bg-black/30 p-2">
                   <input
                     type="text"
                     value={promoCode}
-                    onChange={(e) => {
-                      setPromoCode(e.target.value);
+                    onChange={(event) => {
+                      setPromoCode(event.target.value);
                       setPromoMessage(null);
                     }}
-                    placeholder="PROMO CODE"
-                    className="w-full rounded-xl border border-gray-700 bg-gray-900/80 px-3 py-2 text-center font-mono text-xs uppercase tracking-widest text-cyan-300 outline-none placeholder-gray-700 focus:border-cyan-500"
+                    placeholder="ACCESS CODE"
+                    className="w-full border border-transparent bg-transparent px-2 py-2 text-center font-mono text-xs uppercase tracking-widest text-cyan-200 outline-none placeholder-slate-600 focus:border-cyan-400/40"
                   />
                   <button
                     type="submit"
-                    className="rounded-xl border border-cyan-700/50 bg-cyan-900/50 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-all hover:bg-cyan-800"
+                    className="border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-100 transition hover:border-cyan-100"
                   >
                     Redeem
                   </button>
                 </form>
 
                 {promoMessage ? (
-                  <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${promoMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                  <div className={`mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${promoMessage.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
                     {promoMessage.text}
                   </div>
                 ) : null}
-              </div>
+              </section>
 
-              <LabSwapPanel
-                wallet={wallet}
-                isEmbeddedSwapEnabled={isEmbeddedSwapEnabled}
-                onConnectWallet={onConnectWallet}
-                onOpenSwap={onOpenSwap}
-              />
-            </div>
-
-            <div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-indigo-300">Ship Upgrades</div>
-                  <p className="mt-1 text-xs text-slate-400">Spend mission credits instantly after you fund or collect them in-run.</p>
-                </div>
-                <div className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                  current mission only
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
+              <section className="border border-cyan-300/15 bg-white/[0.04] p-4 [clip-path:polygon(12px_0,100%_0,100%_90%,96%_100%,0_100%,0_12px)]">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="mb-2 flex items-start justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wide text-white">Rapid Review</h3>
-                        <p className="text-xs text-gray-500">Increases firing speed.</p>
-                      </div>
-                      <div className="text-2xl opacity-50">I</div>
-                    </div>
-                    <div className="mb-3 flex h-1.5 space-x-1">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.fireRate ? 'bg-indigo-500' : 'bg-gray-800'}`}></div>
-                      ))}
-                    </div>
+                    <div className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200">Ship Upgrades</div>
+                    <p className="mt-1 text-xs text-slate-400">Current mission only</p>
                   </div>
-                  <button
-                    disabled={stats.coins < getCost('fireRate') || stats.upgrades.fireRate >= 5}
-                    onClick={() => onUpgrade('fireRate')}
-                    className={`w-full rounded-xl border py-3 text-xs font-bold font-mono transition-all active:scale-95 ${stats.coins >= getCost('fireRate') && stats.upgrades.fireRate < 5 ? 'border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500' : 'cursor-not-allowed border-gray-700 bg-transparent text-gray-600'}`}
-                  >
-                    {stats.upgrades.fireRate >= 5 ? 'MAX LEVEL' : `FUND (${getCost('fireRate')} CREDITS)`}
-                  </button>
+                  {canBuyAnyUpgrade ? (
+                    <div className="border border-yellow-300/30 bg-yellow-300/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-yellow-100">
+                      Upgrade ready
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
-                  <div>
-                    <div className="mb-2 flex items-start justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wide text-white">Velocity Grant</h3>
-                        <p className="text-xs text-gray-500">Increases ship speed.</p>
-                      </div>
-                      <div className="text-2xl opacity-50">+</div>
-                    </div>
-                    <div className="mb-3 flex h-1.5 space-x-1">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.speed ? 'bg-purple-500' : 'bg-gray-800'}`}></div>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    disabled={stats.coins < getCost('speed') || stats.upgrades.speed >= 5}
-                    onClick={() => onUpgrade('speed')}
-                    className={`w-full rounded-xl border py-3 text-xs font-bold font-mono transition-all active:scale-95 ${stats.coins >= getCost('speed') && stats.upgrades.speed < 5 ? 'border-purple-500 bg-purple-600 text-white shadow-lg shadow-purple-500/20 hover:bg-purple-500' : 'cursor-not-allowed border-gray-700 bg-transparent text-gray-600'}`}
-                  >
-                    {stats.upgrades.speed >= 5 ? 'MAX LEVEL' : `FUND (${getCost('speed')} CREDITS)`}
-                  </button>
-                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(Object.keys(upgradeCopy) as Array<keyof Upgrades>).map((type) => {
+                    const cost = getCost(type);
+                    const level = stats.upgrades[type];
+                    const isReady = stats.coins >= cost && level < 5;
+                    const copy = upgradeCopy[type];
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
-                  <div>
-                    <div className="mb-2 flex items-start justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wide text-white">Proton Missiles</h3>
-                        <p className="text-xs text-gray-500">Fires homing missiles automatically.</p>
+                    return (
+                      <div key={type} className={`flex min-h-[168px] flex-col justify-between border p-3 transition ${isReady ? 'border-yellow-300/35 bg-yellow-300/8' : 'border-white/8 bg-black/25'}`}>
+                        <div>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-bold uppercase tracking-wide text-white">{copy.title}</h3>
+                              <p className="mt-1 text-xs text-slate-500">{copy.description}</p>
+                            </div>
+                            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">{copy.tag}</span>
+                          </div>
+                          <div className="mt-4 flex h-1.5 gap-1">
+                            {[...Array(5)].map((_, index) => (
+                              <div key={index} className={`flex-1 ${index < level ? 'bg-cyan-300' : 'bg-slate-800'}`}></div>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          disabled={!isReady}
+                          onClick={() => onUpgrade(type)}
+                          className={`mt-4 w-full border py-3 font-mono text-xs font-bold uppercase tracking-[0.12em] transition active:scale-95 ${isReady ? 'border-cyan-300 bg-cyan-300/15 text-cyan-50 hover:bg-cyan-300/25' : 'cursor-not-allowed border-slate-700 bg-transparent text-slate-600'}`}
+                        >
+                          {level >= 5 ? 'Max level' : `${cost} credits`}
+                        </button>
                       </div>
-                      <div className="text-2xl opacity-50">M</div>
-                    </div>
-                    <div className="mb-3 flex h-1.5 space-x-1">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className={`flex-1 rounded-sm ${i < stats.upgrades.missile ? 'bg-blue-500' : 'bg-gray-800'}`}></div>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    disabled={stats.coins < getCost('missile') || stats.upgrades.missile >= 5}
-                    onClick={() => onUpgrade('missile')}
-                    className={`w-full rounded-xl border py-3 text-xs font-bold font-mono transition-all active:scale-95 ${stats.coins >= getCost('missile') && stats.upgrades.missile < 5 ? 'border-blue-500 bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500' : 'cursor-not-allowed border-gray-700 bg-transparent text-gray-600'}`}
-                  >
-                    {stats.upgrades.missile >= 5 ? 'MAX LEVEL' : `FUND (${getCost('missile')} CREDITS)`}
-                  </button>
-                </div>
+                    );
+                  })}
 
-                <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-white/5 p-3 transition-colors hover:bg-white/10">
-                  <div>
-                    <div className="mb-2 flex items-start justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wide text-white">Emergency Aid</h3>
-                        <p className="text-xs text-gray-500">Recover one life unit.</p>
+                  <div className={`flex min-h-[168px] flex-col justify-between border p-3 transition ${stats.coins >= getRepairCost() ? 'border-red-300/35 bg-red-300/8' : 'border-white/8 bg-black/25'}`}>
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-wide text-white">Emergency Aid</h3>
+                          <p className="mt-1 text-xs text-slate-500">Recover one life unit.</p>
+                        </div>
+                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-red-200/70">Repair</span>
                       </div>
-                      <div className="text-2xl opacity-50">H</div>
+                      <div className="mt-4 flex gap-1">
+                        {[...Array(Math.max(1, stats.lives))].slice(0, 5).map((_, index) => (
+                          <div key={index} className="h-1.5 flex-1 bg-red-300"></div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="mb-3 h-1.5 bg-transparent"></div>
+                    <button
+                      disabled={stats.coins < getRepairCost()}
+                      onClick={() => onUpgrade('repair')}
+                      className={`mt-4 w-full border py-3 font-mono text-xs font-bold uppercase tracking-[0.12em] transition active:scale-95 ${stats.coins >= getRepairCost() ? 'border-red-300 bg-red-300/15 text-red-50 hover:bg-red-300/25' : 'cursor-not-allowed border-slate-700 bg-transparent text-slate-600'}`}
+                    >
+                      {getRepairCost()} credits
+                    </button>
                   </div>
-                  <button
-                    disabled={stats.coins < getRepairCost()}
-                    onClick={() => onUpgrade('repair')}
-                    className={`w-full rounded-xl border py-3 text-xs font-bold font-mono transition-all active:scale-95 ${stats.coins >= getRepairCost() ? 'border-red-500 bg-red-600 text-white shadow-lg shadow-red-500/20 hover:bg-red-500' : 'cursor-not-allowed border-gray-700 bg-transparent text-gray-600'}`}
-                  >
-                    {`ADD LIFE (${getRepairCost()} CREDITS)`}
-                  </button>
                 </div>
-              </div>
+              </section>
             </div>
 
             <button
               onClick={onClose}
-              className="scicon-btn mt-2 w-full py-4 text-base font-bold tracking-widest md:text-lg"
+              className="scicon-btn mt-1 w-full py-4 text-base font-bold tracking-widest md:text-lg"
             >
-              RETURN TO MISSION
+              Return to mission
             </button>
           </div>
         </div>

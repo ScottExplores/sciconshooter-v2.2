@@ -38,6 +38,24 @@ class AudioService {
       // Music functionality removed
   }
 
+  public playDialogBlip() {
+    if (!this.ctx || this.muted) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(420 + Math.random() * 180, t);
+    gain.gain.setValueAtTime(0.035, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.045);
+  }
+
   // Procedural Sound Generation
   public playSound(type: 'shoot' | 'explode' | 'coin' | 'powerup' | 'hit' | 'boss_roar' | 'electricity') {
     if (!this.ctx || this.muted) return;

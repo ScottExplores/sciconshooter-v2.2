@@ -66,12 +66,6 @@ export const ASSETS = {
   REFERRAL_LINK: "https://researchhub.com/referral/join?refr=db8c0146-a571-4a57-b576-78f75066298c"
 };
 
-// Pantry Cloud Configuration
-export const PANTRY_CONFIG = {
-  ID: "627252f3-a6e9-434c-b02d-70bf8822a0e8",
-  BASKET_NAME: "leaderboard"
-};
-
 export const DONATION_CONFIG = {
   BUILDER_CODE: "bc_ww78gi4f",
   RECIPIENT_ADDRESS: "0x3A8D692Aabdd4981080a8F6af8375a21359464Bf",
@@ -82,8 +76,7 @@ export const DONATION_CONFIG = {
   BASE_RPC_URL: "https://mainnet.base.org",
   EXPLORER_BASE_URL: "https://basescan.org",
   PRESET_RSC_AMOUNTS: [1, 5, 10],
-  MISSION_CREDITS_PER_RSC: 100,
-  AERODROME_SWAP_URL: "https://aerodrome.finance/swap?from=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913&to=0xfbb75a59193a3525a8825bebe7d4b56899e2f7e1&chain0=8453&chain1=8453"
+  MISSION_CREDITS_PER_RSC: 100
 };
 
 export const STORAGE_KEYS = {
@@ -91,7 +84,10 @@ export const STORAGE_KEYS = {
   HIGH_SCORE: "rh_highscore",
   OFFLINE_SCORES: "offline_scores",
   LOCAL_LEADERBOARD_ARCHIVE: "scicon_local_leaderboard_archive",
-  WALLET_ADDRESS: "scicon_wallet_address"
+  WALLET_ADDRESS: "scicon_wallet_address",
+  WALLET_PROFILES: "scicon_wallet_profiles",
+  DONATED_WALLETS: "scicon_donated_wallets",
+  CREDITED_FUNDING_TXS: "scicon_credited_funding_txs"
 };
 
 export const COLORS = {

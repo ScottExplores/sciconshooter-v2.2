@@ -1,12 +1,10 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { OnchainKitProvider } from '@coinbase/onchainkit';
-import '@coinbase/onchainkit/styles.css';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { Attribution } from 'ox/erc8021';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { base } from 'wagmi/chains';
-import { baseAccount } from 'wagmi/connectors';
+import { baseAccount, coinbaseWallet, injected, walletConnect } from 'wagmi/connectors';
 import { DONATION_CONFIG } from './constants';
 
 const queryClient = new QueryClient();
@@ -20,12 +18,36 @@ const builderDataSuffix = Attribution.toDataSuffix({
   codes: [DONATION_CONFIG.BUILDER_CODE]
 });
 
-export const onchainKitApiKey = (import.meta.env.VITE_ONCHAINKIT_API_KEY as string | undefined) ?? '54f5d727-cc43-403e-9957-8664966d7141';
+const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined;
+
+const browserWalletConnectors = [
+  injected({ shimDisconnect: true }),
+  coinbaseWallet({
+    appName: 'SciCon Shooter',
+    appLogoUrl,
+    preference: 'all'
+  }),
+  ...(walletConnectProjectId
+    ? [
+        walletConnect({
+          projectId: walletConnectProjectId,
+          metadata: {
+            name: 'SciCon Shooter',
+            description: 'Mobile-first science arcade game on Base',
+            url: typeof window !== 'undefined' ? window.location.origin : 'https://sciconshooter.xyz',
+            icons: [appLogoUrl]
+          },
+          showQrModal: true
+        })
+      ]
+    : [])
+];
 
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
     farcasterMiniApp(),
+    ...browserWalletConnectors,
     baseAccount({
       appName: 'SciCon Shooter',
       appLogoUrl,
@@ -50,19 +72,7 @@ interface AppProvidersProps {
 export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => (
   <WagmiProvider config={wagmiConfig}>
     <QueryClientProvider client={queryClient}>
-      <OnchainKitProvider
-        apiKey={onchainKitApiKey}
-        chain={base}
-        config={{
-          appearance: {
-            mode: 'auto',
-            name: 'SciCon Shooter'
-          }
-        }}
-        rpcUrl={DONATION_CONFIG.BASE_RPC_URL}
-      >
-        {children}
-      </OnchainKitProvider>
+      {children}
     </QueryClientProvider>
   </WagmiProvider>
 );

@@ -34,10 +34,10 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
     <div className={`w-full rounded-2xl border border-cyan-500/20 bg-cyan-950/20 ${compact ? 'p-3' : 'p-3 md:p-4'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Base Account Access</h3>
+          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Wallet Access</h3>
           {!compact ? (
             <p className="mt-1 text-[10px] text-gray-400">
-              Connect once so the lab can swap into RSC, fund mission credits, and optionally send a support tip.
+              Connect once to fund mission credits and optionally send a support tip.
             </p>
           ) : null}
         </div>
@@ -63,7 +63,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
             </div>
           ) : (
             <div className="mt-1 text-xs text-gray-300">
-              {wallet.error || (isMiniApp ? 'Mini app wallet should be available from the host.' : 'Use Base Account, then the lab can fund and swap without extra setup.')}
+              {wallet.error || (isMiniApp ? 'Mini app wallet should be available from the host.' : 'Connect a browser wallet, Coinbase Wallet, or Base Account.')}
             </div>
           )}
         </div>
@@ -73,7 +73,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
             onClick={onConnect}
             className={`scicon-btn w-full py-2 text-xs font-bold ${compact ? '' : 'md:w-auto md:px-6'}`}
           >
-            {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT BASE ACCOUNT'}
+            {wallet.status === 'connecting' ? 'CONNECTING...' : 'CONNECT WALLET'}
           </button>
         ) : null}
       </div>

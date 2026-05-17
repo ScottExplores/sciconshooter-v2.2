@@ -1059,19 +1059,57 @@ export class GameEngine {
     this.entities.push(new VisualEffect(x, y, 'ring', '', color));
   }
 
+  getCollisionBox(entity: Entity) {
+    let insetX = 0;
+    let insetY = 0;
+
+    switch (entity.type) {
+      case EntityType.PLAYER:
+        insetX = entity.width * 0.29;
+        insetY = entity.height * 0.24;
+        break;
+      case EntityType.PROJECTILE:
+      case EntityType.MISSILE:
+        insetX = entity.width * 0.2;
+        insetY = entity.isBeam ? entity.height * 0.04 : entity.height * 0.2;
+        break;
+      case EntityType.ENEMY_SWARM:
+        insetX = entity.width * 0.24;
+        insetY = entity.height * 0.24;
+        break;
+      case EntityType.ENEMY_DRONE:
+      case EntityType.ENEMY_JOURNAL:
+        insetX = entity.width * 0.16;
+        insetY = entity.height * 0.16;
+        break;
+      case EntityType.ENEMY_BRICK:
+      case EntityType.ENEMY_INVADER:
+        insetX = entity.width * 0.1;
+        insetY = entity.height * 0.1;
+        break;
+      case EntityType.MINI_BOSS:
+      case EntityType.BOSS:
+        insetX = entity.width * 0.08;
+        insetY = entity.height * 0.08;
+        break;
+      default:
+        insetX = entity.width * 0.08;
+        insetY = entity.height * 0.08;
+    }
+
+    return {
+      x: entity.x + insetX,
+      y: entity.y + insetY,
+      width: Math.max(4, entity.width - insetX * 2),
+      height: Math.max(4, entity.height - insetY * 2)
+    };
+  }
+
   checkCollisions() {
-    // TIGHTEN HITBOX: Use 60% of player size centered for fair dodging
     const intersect = (r1: Entity, r2: Entity) => {
-      let x1 = r1.x, y1 = r1.y, w1 = r1.width, h1 = r1.height;
-      if (r1.type === EntityType.PLAYER) {
-          const paddingX = r1.width * 0.2; // 20% padding each side
-          const paddingY = r1.height * 0.2;
-          x1 += paddingX;
-          y1 += paddingY;
-          w1 -= paddingX * 2;
-          h1 -= paddingY * 2;
-      }
-      return !(r2.x > x1 + w1 || r2.x + r2.width < x1 || r2.y > y1 + h1 || r2.y + r2.height < y1);
+      const a = this.getCollisionBox(r1);
+      const b = this.getCollisionBox(r2);
+      return !(b.x > a.x + a.width || b.x + b.width < a.x || b.y > a.y + a.height || b.y + b.height < a.y);
     };
 
     this.entities.forEach(e => {

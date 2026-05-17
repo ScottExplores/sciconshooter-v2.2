@@ -18,12 +18,15 @@ import UIOverlay from './components/UIOverlay';
 import UpgradeShop from './components/UpgradeShop';
 import Tutorial from './components/Tutorial';
 import SupportPanel from './components/SupportPanel';
+import WalletButton from './components/WalletButton';
+import StoryTransmission from './components/StoryTransmission';
+import UpgradeCoach from './components/UpgradeCoach';
 import { DonationStatus, GameState, LeaderboardEntry, MiniAppState, Stats, Upgrades, WalletSession } from './types';
 import { audioService } from './services/audioService';
 import { ASSETS, DONATION_CONFIG, STORAGE_KEYS, UPGRADE_BASE_COSTS } from './constants';
 import { getScores, saveScore } from './services/leaderboardService';
 import { miniAppService } from './services/miniAppService';
-import { onchainKitApiKey } from './providers';
+import { getStoryBeatForPhase, StoryBeat } from './services/storyBeats';
 
 const defaultMiniAppState: MiniAppState = {
   isMiniApp: false,
@@ -37,6 +40,33 @@ const defaultMissionUpgrades: Upgrades = {
   fireRate: 0,
   speed: 0,
   missile: 0
+};
+
+const getUpgradeCost = (type: keyof Upgrades, upgrades: Upgrades) => (
+  UPGRADE_BASE_COSTS[type] + (5 * (Math.pow(2, upgrades[type]) - 1))
+);
+
+const getRepairCost = (stats: Stats) => (
+  UPGRADE_BASE_COSTS.repair + ((stats.repairsCount || 0) * 5)
+);
+
+const canAffordUpgrade = (stats: Stats) => (
+  (Object.keys(stats.upgrades) as Array<keyof Upgrades>).some((type) => stats.upgrades[type] < 5 && stats.coins >= getUpgradeCost(type, stats.upgrades))
+  || stats.coins >= getRepairCost(stats)
+);
+
+const readCreditedFundingTxs = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.CREDITED_FUNDING_TXS) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const markFundingTxCredited = (hash: string) => {
+  const credited = readCreditedFundingTxs();
+  credited[hash.toLowerCase()] = true;
+  localStorage.setItem(STORAGE_KEYS.CREDITED_FUNDING_TXS, JSON.stringify(credited));
 };
 
 const getUserFacingMessage = (error: any, fallback: string) => {
@@ -70,9 +100,20 @@ const App: React.FC = () => {
   const [labFundingStatus, setLabFundingStatus] = useState<DonationStatus>('idle');
   const [labFundingHash, setLabFundingHash] = useState<string>('');
   const [labFundingError, setLabFundingError] = useState<string>('');
+  const [activeStoryBeat, setActiveStoryBeat] = useState<StoryBeat | null>(null);
+  const [showUpgradeCoach, setShowUpgradeCoach] = useState(false);
+  const [upgradeCoachSeenGameId, setUpgradeCoachSeenGameId] = useState(0);
+  const [donatedWallets, setDonatedWallets] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.DONATED_WALLETS) || '{}');
+    } catch {
+      return {};
+    }
+  });
   const attemptedMiniAppConnect = useRef(false);
+  const lastStoryWaveRef = useRef(0);
 
-  const { address, isConnected, isConnecting } = useAccount();
+  const { address, connector, isConnected, isConnecting } = useAccount();
   const chainId = useChainId();
   const config = useConfig();
   const connectors = useConnectors();
@@ -85,7 +126,32 @@ const App: React.FC = () => {
     address: address ?? null,
     chainId: isConnected ? chainId : null,
     status: isConnected ? 'connected' : (isConnecting || connectStatus === 'pending') ? 'connecting' : walletError ? 'error' : 'idle',
-    error: walletError
+    error: walletError,
+    connectorName: connector?.name,
+    hasDonated: address ? Boolean(donatedWallets[address.toLowerCase()]) : false
+  };
+
+  const getWalletProfileKey = (walletAddress?: string | null) => (
+    walletAddress ? `${STORAGE_KEYS.PLAYER_STATS}:${walletAddress.toLowerCase()}` : STORAGE_KEYS.PLAYER_STATS
+  );
+
+  const readSavedStats = (walletAddress?: string | null) => {
+    const profileKey = getWalletProfileKey(walletAddress);
+    const savedStats = localStorage.getItem(profileKey) || (!walletAddress ? null : localStorage.getItem(STORAGE_KEYS.PLAYER_STATS));
+
+    if (savedStats) {
+      try {
+        return JSON.parse(savedStats);
+      } catch (e) {
+        console.error("Failed to parse saved stats", e);
+      }
+    }
+
+    return {
+      highScore: parseInt(localStorage.getItem(STORAGE_KEYS.HIGH_SCORE) || '0'),
+      totalCoins: 0,
+      playerName: ''
+    };
   };
 
   useEffect(() => {
@@ -115,36 +181,14 @@ const App: React.FC = () => {
   }, [gameState, leaderboard.length]);
 
   const getInitialStats = (): Stats => {
-    const savedStats = localStorage.getItem(STORAGE_KEYS.PLAYER_STATS);
-    if (savedStats) {
-      try {
-        const parsed = JSON.parse(savedStats);
-        return {
-          score: 0,
-          highScore: parsed.highScore || 0,
-          wave: 1,
-          coins: 0,
-          totalCoins: parsed.totalCoins || 0,
-          enemiesDefeated: 0,
-          lives: 3,
-          repairsCount: 0,
-          upgrades: { ...defaultMissionUpgrades },
-          bossProgress: 0,
-          isBossActive: false,
-          bossHp: 0,
-          bossMaxHp: 100
-        };
-      } catch (e) {
-        console.error("Failed to parse saved stats", e);
-      }
-    }
+    const parsed = readSavedStats(address);
 
     return {
       score: 0,
-      highScore: parseInt(localStorage.getItem(STORAGE_KEYS.HIGH_SCORE) || '0'),
+      highScore: parsed.highScore || 0,
       wave: 1,
       coins: 0,
-      totalCoins: 0,
+      totalCoins: parsed.totalCoins || 0,
       enemiesDefeated: 0,
       lives: 3,
       repairsCount: 0,
@@ -161,11 +205,28 @@ const App: React.FC = () => {
   useEffect(() => {
     const statsToSave = {
       highScore: stats.highScore,
-      totalCoins: stats.totalCoins
+      totalCoins: stats.totalCoins,
+      playerName: playerNameInput
     };
-    localStorage.setItem(STORAGE_KEYS.PLAYER_STATS, JSON.stringify(statsToSave));
+    localStorage.setItem(getWalletProfileKey(address), JSON.stringify(statsToSave));
     localStorage.setItem(STORAGE_KEYS.HIGH_SCORE, stats.highScore.toString());
-  }, [stats.highScore, stats.totalCoins]);
+  }, [address, playerNameInput, stats.highScore, stats.totalCoins]);
+
+  useEffect(() => {
+    if (!address) return;
+
+    localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, address);
+    const savedStats = readSavedStats(address);
+    setStats(prev => ({
+      ...prev,
+      highScore: Math.max(prev.highScore, savedStats.highScore || 0),
+      totalCoins: Math.max(prev.totalCoins, savedStats.totalCoins || 0)
+    }));
+
+    if (savedStats.playerName && !playerNameInput) {
+      setPlayerNameInput(savedStats.playerName);
+    }
+  }, [address]);
 
   useEffect(() => {
     let active = true;
@@ -209,6 +270,8 @@ const App: React.FC = () => {
 
   const startGame = () => {
     audioService.init();
+    lastStoryWaveRef.current = 0;
+    setActiveStoryBeat(null);
     setStats(prev => ({
       ...prev,
       score: 0,
@@ -226,6 +289,7 @@ const App: React.FC = () => {
     setLabFundingStatus('idle');
     setLabFundingHash('');
     setLabFundingError('');
+    setShowUpgradeCoach(false);
     setShowNameInput(false);
     setPlayerNameInput('');
     setIsSubmittingScore(false);
@@ -234,10 +298,13 @@ const App: React.FC = () => {
   };
 
   const handleTutorialComplete = () => {
+    lastStoryWaveRef.current = 1;
+    setActiveStoryBeat(getStoryBeatForPhase(1));
     setGameState(GameState.PLAYING);
   };
 
   const resetGame = () => {
+    setActiveStoryBeat(null);
     setGameState(GameState.MENU);
   };
 
@@ -259,7 +326,7 @@ const App: React.FC = () => {
     }
 
     const currentLevel = stats.upgrades[type];
-    const cost = UPGRADE_BASE_COSTS[type] + (5 * (Math.pow(2, currentLevel) - 1));
+    const cost = getUpgradeCost(type, stats.upgrades);
 
     if (stats.coins >= cost && currentLevel < 5) {
       audioService.playSound('coin');
@@ -282,15 +349,20 @@ const App: React.FC = () => {
     audioService.playSound('coin');
   };
 
-  const connectWallet = async () => {
+  const connectWallet = async (connectorId?: string) => {
     if (isConnected) {
       setWalletError('');
       return;
     }
 
-    const preferredConnector = miniApp.isMiniApp
-      ? connectors.find((connector) => connector.id === 'farcaster') ?? connectors.find((connector) => connector.id === 'baseAccount')
-      : connectors.find((connector) => connector.id === 'baseAccount') ?? connectors.find((connector) => connector.id === 'farcaster');
+    const preferredConnector = connectorId
+      ? connectors.find((connector) => connector.id === connectorId)
+      : miniApp.isMiniApp
+        ? connectors.find((connector) => connector.id === 'farcaster') ?? connectors.find((connector) => connector.id === 'baseAccount')
+        : connectors.find((connector) => connector.id === 'injected')
+          ?? connectors.find((connector) => connector.id === 'coinbaseWalletSDK')
+          ?? connectors.find((connector) => connector.id === 'walletConnect')
+          ?? connectors.find((connector) => connector.id === 'baseAccount');
 
     if (!preferredConnector) {
       setWalletError('No compatible Base wallet connector is available.');
@@ -365,6 +437,14 @@ const App: React.FC = () => {
       }
 
       setDonationStatus('success');
+      if (address) {
+        const walletKey = address.toLowerCase();
+        setDonatedWallets(prev => {
+          const next = { ...prev, [walletKey]: true };
+          localStorage.setItem(STORAGE_KEYS.DONATED_WALLETS, JSON.stringify(next));
+          return next;
+        });
+      }
       setTimeout(() => {
         setDonationStatus('idle');
         setDonationHash('');
@@ -406,13 +486,27 @@ const App: React.FC = () => {
         throw new Error('Funding transaction reverted.');
       }
 
-      const credits = rscAmount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC;
-      setStats(prev => ({
-        ...prev,
-        coins: prev.coins + credits
-      }));
-      audioService.playSound('coin');
+      const txKey = hash.toLowerCase();
+      const alreadyCredited = Boolean(readCreditedFundingTxs()[txKey]);
+      if (!alreadyCredited) {
+        const credits = rscAmount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC;
+        setStats(prev => ({
+          ...prev,
+          coins: prev.coins + credits
+        }));
+        markFundingTxCredited(hash);
+        audioService.playSound('coin');
+      }
+
       setLabFundingStatus('success');
+      if (address) {
+        const walletKey = address.toLowerCase();
+        setDonatedWallets(prev => {
+          const next = { ...prev, [walletKey]: true };
+          localStorage.setItem(STORAGE_KEYS.DONATED_WALLETS, JSON.stringify(next));
+          return next;
+        });
+      }
 
       setTimeout(() => {
         setLabFundingStatus('idle');
@@ -440,6 +534,36 @@ const App: React.FC = () => {
   }, [gameState]);
 
   useEffect(() => {
+    if (gameState !== GameState.PLAYING || activeStoryBeat) {
+      return;
+    }
+
+    if (stats.wave <= lastStoryWaveRef.current) {
+      return;
+    }
+
+    const nextBeat = getStoryBeatForPhase(stats.wave);
+    lastStoryWaveRef.current = stats.wave;
+
+    if (nextBeat) {
+      setActiveStoryBeat(nextBeat);
+    }
+  }, [activeStoryBeat, gameState, stats.wave]);
+
+  useEffect(() => {
+    if (gameState !== GameState.PLAYING || activeStoryBeat || showUpgradeCoach) {
+      return;
+    }
+
+    if (upgradeCoachSeenGameId === gameId || !canAffordUpgrade(stats)) {
+      return;
+    }
+
+    setUpgradeCoachSeenGameId(gameId);
+    setShowUpgradeCoach(true);
+  }, [activeStoryBeat, gameId, gameState, showUpgradeCoach, stats, upgradeCoachSeenGameId]);
+
+  useEffect(() => {
     if (gameState === GameState.GAMEOVER) {
       if (stats.score > stats.highScore) {
         localStorage.setItem(STORAGE_KEYS.HIGH_SCORE, stats.score.toString());
@@ -450,10 +574,13 @@ const App: React.FC = () => {
       const lowestScore = sorted.length < 25 ? 0 : sorted[Math.min(sorted.length - 1, 24)].score;
 
       if (stats.score > 0 && (sorted.length < 25 || stats.score >= lowestScore)) {
+        if (!playerNameInput && address) {
+          setPlayerNameInput(`0X${address.slice(2, 6)}`.toUpperCase());
+        }
         setShowNameInput(true);
       }
     }
-  }, [gameState, stats.score, stats.highScore, leaderboard]);
+  }, [address, gameState, playerNameInput, stats.score, stats.highScore, leaderboard]);
 
   const submitScore = async (e?: React.FormEvent) => {
     if (e) {
@@ -469,12 +596,21 @@ const App: React.FC = () => {
     const score = stats.score;
     const wave = stats.wave;
 
-    const newEntry: LeaderboardEntry = { name, score, wave };
+    const newEntry: LeaderboardEntry = {
+      name,
+      score,
+      wave,
+      walletAddress: address || undefined,
+      donated: wallet.hasDonated
+    };
     const optimisticList = [...leaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 25);
     setLeaderboard(optimisticList);
 
     try {
-      const updatedScores = await saveScore(name, score, wave);
+      const updatedScores = await saveScore(name, score, wave, {
+        walletAddress: address,
+        donated: wallet.hasDonated
+      });
       if (updatedScores.length > 0) {
         setLeaderboard(updatedScores);
       }
@@ -498,14 +634,28 @@ const App: React.FC = () => {
     await miniAppService.openUrl(ASSETS.REFERRAL_LINK);
   };
 
-  const openSwap = async () => {
-    await miniAppService.openUrl(DONATION_CONFIG.AERODROME_SWAP_URL);
+  const openResearchHubFund = async () => {
+    await miniAppService.openUrl('https://www.researchhub.com/fund');
+  };
+
+  const openResearchHubProposal = async (url: string) => {
+    await miniAppService.openUrl(url);
   };
 
   const pubStatus = getPubStatus(stats.score);
 
   return (
     <div className="relative h-full w-full select-none bg-[#0b1020]">
+      {gameState === GameState.MENU && !activeStoryBeat ? (
+        <WalletButton
+          wallet={wallet}
+          connectors={connectors}
+          onConnect={connectWallet}
+          onDisconnect={disconnectWallet}
+          onDonate={donateRsc}
+        />
+      ) : null}
+
       {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.GAMEOVER || gameState === GameState.SHOP || gameState === GameState.TUTORIAL) && (
         <GameCanvas
           key={gameId}
@@ -513,6 +663,7 @@ const App: React.FC = () => {
           setStats={setStats}
           setGameState={setGameState}
           gameState={gameState}
+          isTransmissionOpen={Boolean(activeStoryBeat || showUpgradeCoach)}
         />
       )}
 
@@ -527,6 +678,7 @@ const App: React.FC = () => {
           lives={stats.lives}
           showLabGlow={showLabGlow}
           onDisableLabGlow={() => setShowLabGlow(false)}
+          isUpgradeReady={canAffordUpgrade(stats)}
         />
       )}
 
@@ -536,15 +688,9 @@ const App: React.FC = () => {
           onAbout={() => setGameState(GameState.ABOUT)}
           leaderboard={leaderboard}
           isLoading={loadingLeaderboard}
-          wallet={wallet}
-          miniApp={miniApp}
-          donationStatus={donationStatus}
-          donationHash={donationHash}
-          donationError={donationError}
-          onConnectWallet={connectWallet}
-          onDisconnectWallet={disconnectWallet}
-          onDonate={donateRsc}
           onOpenReferral={openReferral}
+          onOpenFund={openResearchHubFund}
+          onOpenProposal={openResearchHubProposal}
         />
       )}
 
@@ -583,30 +729,23 @@ const App: React.FC = () => {
         <UpgradeShop
           stats={stats}
           wallet={wallet}
-          miniApp={miniApp}
           onUpgrade={handleUpgrade}
           onDeposit={handleDeposit}
           onClose={() => setGameState(GameState.PLAYING)}
           onConnectWallet={connectWallet}
           onBuyMissionCredits={fundCurrentMission}
-          onOpenSwap={openSwap}
           labFundingStatus={labFundingStatus}
           labFundingHash={labFundingHash}
           labFundingError={labFundingError}
-          isEmbeddedSwapEnabled={Boolean(onchainKitApiKey)}
           gameId={gameId}
         />
       )}
 
       {gameState === GameState.GAMEOVER && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <div className="relative flex max-h-[95vh] w-full max-w-md flex-col p-1 animate-bounce-in">
-            <div className="scicon-border-container"></div>
-            <div className="scicon-inner-bg"></div>
-            <div className="scicon-node node-tl-1"></div>
-            <div className="scicon-node node-tr-1"></div>
-            <div className="scicon-node node-bl-1"></div>
-            <div className="scicon-node node-br-1"></div>
+          <div className="relative flex max-h-[95vh] w-full max-w-md flex-col overflow-hidden border border-red-300/20 bg-slate-950/88 shadow-[0_24px_90px_rgba(0,0,0,0.58)] backdrop-blur-xl animate-bounce-in [clip-path:polygon(18px_0,100%_0,100%_92%,96%_100%,0_100%,0_18px)]">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-300/70 to-transparent"></div>
+            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/45 to-transparent"></div>
 
             <div className="relative z-10 space-y-4 overflow-y-auto p-6 text-center custom-scrollbar">
               {showNameInput ? (
@@ -642,7 +781,7 @@ const App: React.FC = () => {
                     <p className="font-mono text-sm uppercase text-gray-400">{pubStatus.desc}</p>
                   </div>
 
-                  <div className="rounded border border-white/10 bg-white/5 p-4">
+                  <div className="border border-white/10 bg-white/[0.04] p-4 [clip-path:polygon(12px_0,100%_0,100%_90%,96%_100%,0_100%,0_12px)]">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-gray-400">SCORE</span>
                       <span className="text-2xl font-bold text-white">{stats.score}</span>
@@ -705,7 +844,7 @@ const App: React.FC = () => {
 
               <div className="space-y-4 text-left font-mono text-sm leading-relaxed text-gray-300">
                 <p>
-                  <strong className="text-indigo-400">OBJECTIVE:</strong> Navigate the treacherous landscape of academic publishing. Pilot the <span className="text-white">Research Flask</span> and protect your manuscript from predatory journals and paywalls.
+                  <strong className="text-indigo-400">OBJECTIVE:</strong> Pilot the <span className="text-white">Research Flask</span> through the bottlenecks slowing open science. Score high, upgrade with RSC-powered mission credits, and fight for proposals that deserve funding.
                 </p>
                 <div>
                   <strong className="text-indigo-400">ENEMIES:</strong>
@@ -717,15 +856,21 @@ const App: React.FC = () => {
                   </ul>
                 </div>
                 <div>
-                  <strong className="text-indigo-400">LAB FLOW:</strong>
+                  <strong className="text-indigo-400">RSC LAB:</strong>
                   <ul className="mt-1 list-inside list-disc space-y-1 pl-2">
                     <li><span className="text-yellow-300">Mission Credits:</span> Collect them in-run or fund more at 100 credits per 1 RSC.</li>
-                    <li><span className="text-cyan-300">Base Account:</span> Connect once so the lab can swap and fund the active run.</li>
-                    <li><span className="text-purple-400">Current Game Only:</span> Lab funding and upgrades reset when the next mission starts.</li>
+                    <li><span className="text-cyan-300">Upgrades:</span> Spend credits on fire rate, handling, missiles, and emergency repairs.</li>
+                    <li><span className="text-purple-400">Current Run:</span> Lab upgrades reset each mission, so the best pilots decide when to invest.</li>
                   </ul>
                 </div>
+                <div>
+                  <strong className="text-indigo-400">FUNDING EVENT:</strong>
+                  <p className="mt-1">
+                    The monthly leaderboard can be used as a community signal: top pilots nominate a ResearchHub proposal, and Scott can direct funding credits toward the winner's pick.
+                  </p>
+                </div>
                 <p className="mt-4 border-t border-gray-700 pt-2 text-xs italic text-gray-500">
-                  "Science is a battlefield. Publish or Perish."
+                  "Upgrade the ship. Clear the bottleneck. Fund the future."
                 </p>
               </div>
 
@@ -739,6 +884,25 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {activeStoryBeat ? (
+        <StoryTransmission
+          beat={activeStoryBeat}
+          onComplete={() => setActiveStoryBeat(null)}
+        />
+      ) : null}
+
+      {showUpgradeCoach ? (
+        <UpgradeCoach
+          credits={stats.coins}
+          onOpenLab={() => {
+            setShowUpgradeCoach(false);
+            setShowLabGlow(false);
+            setGameState(GameState.SHOP);
+          }}
+          onContinue={() => setShowUpgradeCoach(false)}
+        />
+      ) : null}
     </div>
   );
 };

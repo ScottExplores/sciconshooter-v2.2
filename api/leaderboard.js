@@ -1,0 +1,169 @@
+const MAX_SCORES = 25;
+const LEADERBOARD_KEY = process.env.LEADERBOARD_KV_KEY || 'scicon-shooter:leaderboard';
+
+const DEFAULT_SCORES = [
+  { name: 'BRIAN', score: 100, wave: 2 },
+  { name: 'JEFFREY', score: 98, wave: 2 },
+  { name: 'TYLER', score: 96, wave: 1 },
+  { name: 'BASE', score: 94, wave: 1 },
+  { name: 'PATRICK', score: 92, wave: 1 },
+  { name: 'SCOTT', score: 90, wave: 1 },
+  { name: 'KOBOLD', score: 88, wave: 1 },
+  { name: 'ANTON', score: 86, wave: 1 },
+  { name: 'NAMAN', score: 84, wave: 1 },
+  { name: 'ED', score: 82, wave: 1 },
+  { name: 'CALEB', score: 80, wave: 1 },
+  { name: 'SANA', score: 78, wave: 1 },
+  { name: 'JESSE', score: 76, wave: 1 },
+  { name: 'LOUIE', score: 74, wave: 1 },
+  { name: 'VITALIK', score: 72, wave: 1 },
+  { name: 'SATOSHI', score: 70, wave: 1 },
+  { name: 'REVIEWER 2', score: 68, wave: 1 },
+  { name: 'GUEST 1', score: 65, wave: 1 },
+  { name: 'GUEST 2', score: 60, wave: 1 },
+  { name: 'GUEST 3', score: 55, wave: 1 },
+  { name: 'GUEST 4', score: 50, wave: 1 },
+  { name: 'GUEST 5', score: 45, wave: 1 },
+  { name: 'GUEST 6', score: 40, wave: 1 },
+  { name: 'GUEST 7', score: 35, wave: 1 },
+  { name: 'GUEST 8', score: 30, wave: 1 }
+].map((entry) => ({ ...entry, date: new Date(0).toISOString() }));
+
+const getRedisConfig = () => ({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+});
+
+const sendJson = (res, status, payload) => {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.end(JSON.stringify(payload));
+};
+
+const sanitizeEntry = (entry) => {
+  if (!entry || typeof entry.name !== 'string' || typeof entry.score !== 'number') {
+    return null;
+  }
+
+  const name = entry.name.trim().slice(0, 15).toUpperCase();
+  if (!name) return null;
+
+  return {
+    name,
+    score: Math.max(0, Math.floor(entry.score)),
+    wave: typeof entry.wave === 'number' ? Math.max(1, Math.floor(entry.wave)) : 1,
+    date: typeof entry.date === 'string' ? entry.date : new Date().toISOString(),
+    walletAddress: typeof entry.walletAddress === 'string' ? entry.walletAddress.toLowerCase() : undefined,
+    donated: Boolean(entry.donated)
+  };
+};
+
+const dedupeAndSort = (scores, limit = MAX_SCORES) => {
+  const seen = new Set();
+  const normalized = scores
+    .map(sanitizeEntry)
+    .filter(Boolean)
+    .filter((score) => {
+      const key = `${score.name}|${score.score}|${score.wave}|${score.date}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  normalized.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+  });
+
+  return normalized.slice(0, limit);
+};
+
+const redisCommand = async (command) => {
+  const { url, token } = getRedisConfig();
+  if (!url || !token) {
+    throw new Error('Missing KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(command)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Redis command failed with ${response.status}`);
+  }
+
+  return response.json();
+};
+
+const readScores = async () => {
+  const data = await redisCommand(['GET', LEADERBOARD_KEY]);
+  if (!data.result) {
+    return dedupeAndSort(DEFAULT_SCORES);
+  }
+
+  const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+  const scores = Array.isArray(parsed.scores) ? parsed.scores : parsed;
+  return dedupeAndSort(Array.isArray(scores) ? scores : DEFAULT_SCORES);
+};
+
+const writeScores = async (scores) => {
+  const topScores = dedupeAndSort(scores);
+  await redisCommand(['SET', LEADERBOARD_KEY, JSON.stringify({ scores: topScores })]);
+  return topScores;
+};
+
+const parseBody = (body) => {
+  if (!body) return {};
+  if (typeof body === 'string') {
+    try {
+      return JSON.parse(body);
+    } catch {
+      return {};
+    }
+  }
+
+  return body;
+};
+
+module.exports = async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    return sendJson(res, 204, {});
+  }
+
+  try {
+    if (req.method === 'GET') {
+      const scores = await readScores();
+      return sendJson(res, 200, { scores });
+    }
+
+    if (req.method === 'POST') {
+      const body = parseBody(req.body);
+      const currentScores = await readScores();
+      const entry = sanitizeEntry(body.entry);
+      const submittedScores = Array.isArray(body.scores) ? body.scores : [];
+
+      if (!entry && submittedScores.length === 0) {
+        return sendJson(res, 400, { error: 'Missing leaderboard entry' });
+      }
+
+      const scores = await writeScores([...currentScores, ...submittedScores, entry].filter(Boolean));
+      return sendJson(res, 200, { scores });
+    }
+
+    return sendJson(res, 405, { error: 'Method not allowed' });
+  } catch (error) {
+    console.error('Leaderboard API error:', error);
+    return sendJson(res, 500, {
+      error: 'Leaderboard storage is not configured',
+      details: error.message
+    });
+  }
+};

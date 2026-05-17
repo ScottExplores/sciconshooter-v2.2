@@ -87,25 +87,24 @@
         position: relative;
         background: #000000;
         clip-path: polygon(
-          20px 0, calc(100% - 20px) 0, 
-          100% 20px, 100% calc(100% - 20px), 
-          calc(100% - 20px) 100%, 20px 100%, 
-          0 calc(100% - 20px), 0 20px
+          14px 0, 100% 0,
+          100% calc(100% - 14px), calc(100% - 14px) 100%,
+          0 100%, 0 14px
         );
       }
 
-      /* The Border & Glow Container */
       .scicon-border-container {
         position: absolute;
-        inset: -2px; 
-        background: linear-gradient(135deg, #4b5563 0%, #9ca3af 50%, #4b5563 100%); 
+        inset: 0;
+        background:
+          linear-gradient(135deg, rgba(34, 211, 238, 0.75), rgba(99, 102, 241, 0.2) 42%, rgba(250, 204, 21, 0.5));
         z-index: -1;
         clip-path: polygon(
-          20px 0, calc(100% - 20px) 0, 
-          100% 20px, 100% calc(100% - 20px), 
-          calc(100% - 20px) 100%, 20px 100%, 
-          0 calc(100% - 20px), 0 20px
+          18px 0, 100% 0,
+          100% calc(100% - 18px), calc(100% - 18px) 100%,
+          0 100%, 0 18px
         );
+        opacity: 0.72;
       }
       
       /* Electric Pulse Animation */
@@ -122,7 +121,7 @@
       }
 
       .scicon-electric-border {
-        background: linear-gradient(135deg, #4f46e5 0%, #a78bfa 50%, #4f46e5 100%) !important;
+        background: linear-gradient(135deg, rgba(34, 211, 238, 0.9), rgba(99, 102, 241, 0.55), rgba(16, 185, 129, 0.75)) !important;
         animation: electric-pulse 3s infinite ease-in-out;
       }
       
@@ -139,28 +138,34 @@
       .blue-glow-animate {
         animation: blue-glow-pulse 2s infinite ease-in-out;
       }
-      
+
+      @keyframes scicon-talk {
+        0%, 100% { transform: translate(0, 0) scale(1); filter: saturate(1.1); }
+        20% { transform: translate(-1px, 1px) scale(1.015); }
+        40% { transform: translate(1px, -1px) scale(1.02); filter: saturate(1.35); }
+        60% { transform: translate(1px, 1px) scale(1.01); }
+        80% { transform: translate(-1px, -1px) scale(1.018); }
+      }
+
+      .scicon-talk-portrait {
+        animation: scicon-talk 0.16s steps(2, end) infinite;
+      }
+
       .scicon-inner-bg {
          position: absolute;
-         inset: 2px;
-         background: rgba(5, 5, 10, 0.95);
+         inset: 1px;
+         background:
+          linear-gradient(180deg, rgba(5, 12, 24, 0.96), rgba(2, 6, 18, 0.92)),
+          radial-gradient(circle at top left, rgba(34, 211, 238, 0.12), transparent 42%);
          clip-path: polygon(
-          19px 0, calc(100% - 19px) 0, 
-          100% 19px, 100% calc(100% - 19px), 
-          calc(100% - 19px) 100%, 19px 100%, 
-          0 calc(100% - 19px), 0 19px
+          17px 0, 100% 0,
+          100% calc(100% - 17px), calc(100% - 17px) 100%,
+          0 100%, 0 17px
         );
       }
 
-      /* The Circuit Nodes */
       .scicon-node {
-        position: absolute;
-        width: 8px;
-        height: 8px;
-        background: #9ca3af;
-        border-radius: 50%;
-        z-index: 10;
-        box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+        display: none;
       }
 
       .node-tl-1 { top: -4px; left: 16px; }
@@ -198,6 +203,29 @@
       }
       .scicon-btn-secondary:hover {
         background: rgba(255,255,255,0.05);
+      }
+
+      .rh-nav-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 40px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.95);
+        color: #0f172a;
+        padding: 9px 12px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+      }
+
+      .rh-nav-button:hover {
+        transform: translateY(-1px);
+        background: #dbeafe;
+        border-color: rgba(96, 165, 250, 0.55);
       }
     </style>
   </head>

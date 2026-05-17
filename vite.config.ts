@@ -9,6 +9,14 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 3000
+    port: 5173,
+    proxy: {
+      '/api/researchhub-proposals': {
+        target: 'https://backend.prod.researchhub.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: () => '/api/funding_feed/?fundraise_status=OPEN&ordering=best&page_size=5&content_type=PREREGISTRATION'
+      }
+    }
   }
 });
