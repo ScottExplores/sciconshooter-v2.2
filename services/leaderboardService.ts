@@ -4,34 +4,41 @@ import { LeaderboardEntry } from '../types';
 const API_URL = (import.meta.env.VITE_LEADERBOARD_API_URL as string | undefined)?.trim() || '/api/leaderboard';
 const MAX_SCORES = 25;
 const LOCAL_ARCHIVE_LIMIT = 100;
+const SEED_DATE = new Date(0).toISOString();
 
 const DEFAULT_SCORES: LeaderboardEntry[] = [
-  { name: "BRIAN", score: 100, date: new Date().toISOString(), wave: 2 },
-  { name: "JEFFREY", score: 98, date: new Date().toISOString(), wave: 2 },
-  { name: "TYLER", score: 96, date: new Date().toISOString(), wave: 1 },
-  { name: "BASE", score: 94, date: new Date().toISOString(), wave: 1 },
-  { name: "PATRICK", score: 92, date: new Date().toISOString(), wave: 1 },
-  { name: "SCOTT", score: 90, date: new Date().toISOString(), wave: 1 },
-  { name: "KOBOLD", score: 88, date: new Date().toISOString(), wave: 1 },
-  { name: "ANTON", score: 86, date: new Date().toISOString(), wave: 1 },
-  { name: "NAMAN", score: 84, date: new Date().toISOString(), wave: 1 },
-  { name: "ED", score: 82, date: new Date().toISOString(), wave: 1 },
-  { name: "CALEB", score: 80, date: new Date().toISOString(), wave: 1 },
-  { name: "SANA", score: 78, date: new Date().toISOString(), wave: 1 },
-  { name: "JESSE", score: 76, date: new Date().toISOString(), wave: 1 },
-  { name: "LOUIE", score: 74, date: new Date().toISOString(), wave: 1 },
-  { name: "VITALIK", score: 72, date: new Date().toISOString(), wave: 1 },
-  { name: "SATOSHI", score: 70, date: new Date().toISOString(), wave: 1 },
-  { name: "REVIEWER 2", score: 68, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 1", score: 65, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 2", score: 60, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 3", score: 55, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 4", score: 50, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 5", score: 45, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 6", score: 40, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 7", score: 35, date: new Date().toISOString(), wave: 1 },
-  { name: "GUEST 8", score: 30, date: new Date().toISOString(), wave: 1 }
+  { name: "BRIAN", score: 100, date: SEED_DATE, wave: 2 },
+  { name: "JEFFREY", score: 98, date: SEED_DATE, wave: 2 },
+  { name: "TYLER", score: 96, date: SEED_DATE, wave: 1 },
+  { name: "BASE", score: 94, date: SEED_DATE, wave: 1 },
+  { name: "PATRICK", score: 92, date: SEED_DATE, wave: 1 },
+  { name: "SCOTT", score: 90, date: SEED_DATE, wave: 1 },
+  { name: "KOBOLD", score: 88, date: SEED_DATE, wave: 1 },
+  { name: "ANTON", score: 86, date: SEED_DATE, wave: 1 },
+  { name: "NAMAN", score: 84, date: SEED_DATE, wave: 1 },
+  { name: "ED", score: 82, date: SEED_DATE, wave: 1 },
+  { name: "CALEB", score: 80, date: SEED_DATE, wave: 1 },
+  { name: "SANA", score: 78, date: SEED_DATE, wave: 1 },
+  { name: "JESSE", score: 76, date: SEED_DATE, wave: 1 },
+  { name: "LOUIE", score: 74, date: SEED_DATE, wave: 1 },
+  { name: "VITALIK", score: 72, date: SEED_DATE, wave: 1 },
+  { name: "SATOSHI", score: 70, date: SEED_DATE, wave: 1 },
+  { name: "REVIEWER 2", score: 68, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 1", score: 65, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 2", score: 60, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 3", score: 55, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 4", score: 50, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 5", score: 45, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 6", score: 40, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 7", score: 35, date: SEED_DATE, wave: 1 },
+  { name: "GUEST 8", score: 30, date: SEED_DATE, wave: 1 }
 ];
+
+const DEFAULT_SCORE_KEYS = new Set(DEFAULT_SCORES.map((entry) => `${entry.name}|${entry.score}|${entry.wave}`));
+
+const isDefaultSeedEntry = (entry: LeaderboardEntry) => (
+  DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
+);
 
 const sanitizeEntry = (entry: Partial<LeaderboardEntry> | null | undefined): LeaderboardEntry | null => {
   if (!entry || typeof entry.name !== 'string' || typeof entry.score !== 'number') {
@@ -134,7 +141,7 @@ export const getScores = async (): Promise<LeaderboardEntry[]> => {
 
     if (localArchive.length > 0 || offlineTop.length > 0) {
       try {
-        remoteScores = await writeRemoteScores(null, mergeScores(localArchive, offlineTop));
+        remoteScores = await writeRemoteScores(null, mergeScores(localArchive, offlineTop).filter((score) => !isDefaultSeedEntry(score)));
       } catch (syncError) {
         console.error("Failed to sync local leaderboard archive", syncError);
       }
@@ -175,7 +182,7 @@ export const saveScore = async (
   writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, nextLocalArchive.slice(0, LOCAL_ARCHIVE_LIMIT));
 
   try {
-    const remoteScores = await writeRemoteScores(newEntry, nextLocalArchive);
+    const remoteScores = await writeRemoteScores(newEntry, nextLocalArchive.filter((score) => !isDefaultSeedEntry(score)));
     const mergedScores = mergeScores(remoteScores, nextLocalArchive, DEFAULT_SCORES);
     const topScores = mergedScores.slice(0, MAX_SCORES);
 

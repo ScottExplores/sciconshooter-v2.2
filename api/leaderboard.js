@@ -31,6 +31,12 @@ const DEFAULT_SCORES = [
   { name: 'GUEST 8', score: 30, wave: 1 }
 ].map((entry) => ({ ...entry, date: new Date(0).toISOString() }));
 
+const DEFAULT_SCORE_KEYS = new Set(DEFAULT_SCORES.map((entry) => `${entry.name}|${entry.score}|${entry.wave}`));
+
+const isDefaultSeedEntry = (entry) => (
+  Boolean(entry) && DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
+);
+
 const getRedisConfig = () => ({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
@@ -181,12 +187,16 @@ const readSupabaseScores = async () => {
   }
 
   const rows = await response.json();
-  const scores = Array.isArray(rows) ? rows.map(fromSupabaseRow).filter(Boolean) : [];
+  const scores = Array.isArray(rows)
+    ? rows.map(fromSupabaseRow).filter(Boolean).filter((score) => !isDefaultSeedEntry(score))
+    : [];
   return scores.length > 0 ? dedupeAndSort(scores) : dedupeAndSort(DEFAULT_SCORES);
 };
 
 const writeSupabaseScores = async (scores) => {
-  const rows = dedupeAndSort(scores, SYNC_SCORE_LIMIT).map(toSupabaseRow);
+  const rows = dedupeAndSort(scores, SYNC_SCORE_LIMIT)
+    .filter((score) => !isDefaultSeedEntry(score))
+    .map(toSupabaseRow);
 
   if (rows.length > 0) {
     const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?on_conflict=name,score,wave,date`), {
