@@ -195,7 +195,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
         </div>
 
         <main className="grid flex-1 gap-2 lg:min-h-0 lg:grid-cols-[0.92fr_1.08fr]">
-          <section className="flex min-h-[300px] flex-col rounded-[26px] border border-white/10 bg-slate-950/70 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+          <section className="self-start rounded-[26px] border border-white/10 bg-slate-950/70 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>
                 <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">Global Leaderboard</h3>
@@ -204,8 +204,8 @@ const StartScreen: React.FC<StartScreenProps> = ({
               <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-100">Top 25</span>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden rounded-[20px] border border-white/10 bg-black/35">
-              <div className="custom-scrollbar h-full max-h-[310px] overflow-y-auto p-2 sm:max-h-[360px] lg:max-h-none">
+            <div className="overflow-hidden rounded-[20px] border border-white/10 bg-black/35">
+              <div className="custom-scrollbar max-h-[250px] overflow-y-auto p-2 sm:max-h-[270px]">
                 <div className="sticky top-0 z-10 mb-1 grid grid-cols-[42px_1fr_44px_72px] gap-2 rounded-xl bg-slate-950/92 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500 backdrop-blur">
                   <span>Rank</span>
                   <span>Pilot</span>
