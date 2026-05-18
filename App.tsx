@@ -27,6 +27,7 @@ import { ASSETS, DONATION_CONFIG, STORAGE_KEYS, UPGRADE_BASE_COSTS } from './con
 import { getScores, saveScore } from './services/leaderboardService';
 import { miniAppService } from './services/miniAppService';
 import { getStoryBeatForPhase, StoryBeat } from './services/storyBeats';
+import { openReownConnectModal } from './providers';
 
 const defaultMiniAppState: MiniAppState = {
   isMiniApp: false,
@@ -133,6 +134,8 @@ const App: React.FC = () => {
   });
   const attemptedMiniAppConnect = useRef(false);
   const lastStoryWaveRef = useRef(0);
+  const introStoryTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const gameStateRef = useRef<GameState>(GameState.MENU);
 
   const { address, connector, isConnected, isConnecting } = useAccount();
   const chainId = useChainId();
@@ -142,6 +145,19 @@ const App: React.FC = () => {
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
+
+  const clearIntroStoryTimeout = () => {
+    if (introStoryTimeoutRef.current) {
+      window.clearTimeout(introStoryTimeoutRef.current);
+      introStoryTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => () => clearIntroStoryTimeout(), []);
 
   const wallet: WalletSession = {
     address: address ?? null,
@@ -292,6 +308,7 @@ const App: React.FC = () => {
 
   const startGame = () => {
     audioService.init();
+    clearIntroStoryTimeout();
     lastStoryWaveRef.current = 0;
     setActiveStoryBeat(null);
     setStats(prev => ({
@@ -322,12 +339,19 @@ const App: React.FC = () => {
   };
 
   const handleTutorialComplete = () => {
+    clearIntroStoryTimeout();
     lastStoryWaveRef.current = 1;
-    setActiveStoryBeat(getStoryBeatForPhase(1));
     setGameState(GameState.PLAYING);
+    introStoryTimeoutRef.current = window.setTimeout(() => {
+      introStoryTimeoutRef.current = null;
+      if (gameStateRef.current === GameState.PLAYING) {
+        setActiveStoryBeat(getStoryBeatForPhase(1));
+      }
+    }, 900);
   };
 
   const resetGame = () => {
+    clearIntroStoryTimeout();
     setActiveStoryBeat(null);
     setGameState(GameState.MENU);
   };
@@ -394,13 +418,27 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!connectorId && !miniApp.isMiniApp) {
+      try {
+        setWalletError('');
+        const opened = await openReownConnectModal();
+        if (opened) {
+          return;
+        }
+      } catch (error: any) {
+        console.error("Wallet modal failed", error);
+        setWalletError(getUserFacingMessage(error, 'Wallet connection was cancelled.'));
+        return;
+      }
+    }
+
     const preferredConnector = connectorId
       ? connectors.find((connector) => connector.id === connectorId)
       : miniApp.isMiniApp
         ? connectors.find((connector) => connector.id === 'farcaster') ?? connectors.find((connector) => connector.id === 'baseAccount')
-        : connectors.find((connector) => connector.id === 'injected')
+        : connectors.find((connector) => connector.id === 'walletConnect')
+          ?? connectors.find((connector) => connector.id === 'injected')
           ?? connectors.find((connector) => connector.id === 'coinbaseWalletSDK')
-          ?? connectors.find((connector) => connector.id === 'walletConnect')
           ?? connectors.find((connector) => connector.id === 'baseAccount');
 
     if (!preferredConnector) {
@@ -692,7 +730,6 @@ const App: React.FC = () => {
       {gameState === GameState.MENU && !activeStoryBeat ? (
         <WalletButton
           wallet={wallet}
-          connectors={connectors}
           onConnect={connectWallet}
           onDisconnect={disconnectWallet}
           onDonate={donateRsc}
@@ -774,7 +811,6 @@ const App: React.FC = () => {
         <UpgradeShop
           stats={stats}
           wallet={wallet}
-          connectors={connectors}
           onUpgrade={handleUpgrade}
           onDeposit={handleDeposit}
           onBuyPowerup={handleBuyPowerup}

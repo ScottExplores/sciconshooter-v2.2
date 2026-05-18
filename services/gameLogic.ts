@@ -239,6 +239,7 @@ export class GameEngine {
   miniBossRef: Entity | null = null;
   spawnedMiniBoss1: boolean = false;
   spawnedWallBoss: boolean = false;
+  mainBossDefeated: boolean = false;
   asteroidBeltMaxCount: number = 0;
   invaderDirection: number = 1;
   invaderMoveTimer: number = 0;
@@ -417,6 +418,7 @@ export class GameEngine {
     this.miniBossRef = null;
     this.spawnedMiniBoss1 = false;
     this.spawnedWallBoss = false;
+    this.mainBossDefeated = false;
     this.asteroidBeltMaxCount = 0;
     this.inBossWarningSequence = false;
     this.bossWarningDuration = 0;
@@ -545,7 +547,7 @@ export class GameEngine {
              }
         }
         // CHECKPOINT 3: 100% (Final Boss)
-        else if (this.stats.bossProgress >= 1 && !this.bossRef) {
+        else if (this.stats.bossProgress >= 1 && !this.bossRef && !this.mainBossDefeated) {
              if (!this.inBossWarningSequence) {
                  this.startBossWarning('gatekeeper');
              }
@@ -1343,12 +1345,14 @@ export class GameEngine {
                  if (target.type === EntityType.BOSS) {
                     this.stats.score += 1000 * waveMult; 
                     this.bossRef = null;
-                    for(let i=0; i<15; i++) {
+                    this.mainBossDefeated = true;
+                    this.inBossWarningSequence = false;
+                    this.pendingBossType = null;
+                    this.bossWarningFrame = 0;
+                    for(let i=0; i<8; i++) {
                         this.spawnCoin(target.x + Math.random()*target.width, target.y + Math.random()*target.height);
                     }
                     this.spawnPowerup(target.x + 50, target.y + 50);
-                    this.spawnPowerup(target.x + 100, target.y + 50);
-                    this.spawnPowerup(target.x + 50, target.y + 100);
                     this.spawnPowerup(target.x + 100, target.y + 100);
                     
                     // TRIGGER ELECTRICITY SOUND

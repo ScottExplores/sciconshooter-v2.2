@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import type { Connector } from 'wagmi';
 import { DonationStatus, PowerupType, Stats, Upgrades, WalletSession } from '../types';
 import { ASSETS, DONATION_CONFIG, UPGRADE_BASE_COSTS } from '../constants';
 
 interface UpgradeShopProps {
   stats: Stats;
   wallet: WalletSession;
-  connectors: readonly Connector[];
   onUpgrade: (type: keyof Upgrades | 'repair') => void;
   onDeposit: (coins: number) => void;
   onBuyPowerup: (type: PowerupType) => void;
@@ -26,26 +24,6 @@ const fundingPackages = DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => ({
 }));
 
 const shortenAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-const getConnectorLabel = (connector: Connector) => {
-  if (connector.id === 'baseAccount') return 'Base Account';
-  if (connector.id === 'coinbaseWalletSDK') return 'Coinbase';
-  if (connector.id === 'walletConnect') return 'WalletConnect';
-  if (connector.id === 'injected') return 'Browser / Rabby';
-  if (connector.id === 'farcaster') return 'Farcaster';
-  return connector.name;
-};
-
-const getVisibleConnectors = (connectors: readonly Connector[]) => {
-  const priority = ['baseAccount', 'coinbaseWalletSDK', 'walletConnect', 'injected'];
-  return [...connectors]
-    .filter((connector) => connector.id !== 'farcaster')
-    .sort((a, b) => {
-      const aIndex = priority.indexOf(a.id);
-      const bIndex = priority.indexOf(b.id);
-      return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
-  });
-};
 
 type FounderPowerupType = Exclude<PowerupType, PowerupType.EXTRA_LIFE>;
 
@@ -112,7 +90,6 @@ const statusText: Record<DonationStatus, string> = {
 const UpgradeShop: React.FC<UpgradeShopProps> = ({
   stats,
   wallet,
-  connectors,
   onUpgrade,
   onDeposit,
   onBuyPowerup,
@@ -127,7 +104,6 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
 }) => {
   const [promoCode, setPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [showWalletChoices, setShowWalletChoices] = useState(false);
 
   const getCost = (type: keyof Upgrades) => {
     const level = stats.upgrades[type];
@@ -177,7 +153,6 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   };
 
   const isFundingBusy = labFundingStatus === 'switching_network' || labFundingStatus === 'processing' || labFundingStatus === 'confirming';
-  const visibleConnectors = getVisibleConnectors(connectors);
   const canBuyAnyUpgrade = (Object.keys(upgradeCopy) as Array<keyof Upgrades>).some((type) => stats.coins >= getCost(type) && stats.upgrades[type] < 5)
     || stats.coins >= getRepairCost()
     || purchasablePowerups.some((type) => stats.coins >= getPowerupCost(type));
@@ -321,27 +296,11 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   <div className="mt-3 rounded-2xl border border-cyan-300/15 bg-black/30 p-2">
                     <button
                       type="button"
-                      onClick={() => setShowWalletChoices((value) => !value)}
+                      onClick={() => onConnectWallet()}
                       className="w-full rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-100"
                     >
                       {wallet.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
                     </button>
-                    {showWalletChoices ? (
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        {visibleConnectors.map((connector) => (
-                          <button
-                            key={connector.uid}
-                            onClick={() => {
-                              setShowWalletChoices(false);
-                              onConnectWallet(connector.id);
-                            }}
-                            className="rounded-xl border border-white/10 bg-white/[0.06] px-2 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white transition hover:border-cyan-200/60 hover:bg-cyan-300/10"
-                          >
-                            {getConnectorLabel(connector)}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
                     {wallet.error ? <div className="mt-2 px-1 text-[10px] leading-relaxed text-red-300">{wallet.error}</div> : null}
                   </div>
                 ) : null}

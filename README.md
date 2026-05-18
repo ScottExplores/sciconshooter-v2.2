@@ -42,4 +42,4 @@ For local testing against a deployed leaderboard, set `VITE_LEADERBOARD_API_URL`
 
 ## Wallet testing
 
-The app supports injected browser wallets, Coinbase Wallet, Base Account, and Farcaster mini app wallets. To enable WalletConnect as another mobile option, add `VITE_WALLETCONNECT_PROJECT_ID` from WalletConnect Cloud.
+The app supports the Reown AppKit wallet picker, injected browser wallets, Coinbase Wallet, Base Account, and Farcaster mini app wallets. For production, add `VITE_REOWN_PROJECT_ID` from Reown Cloud. `VITE_WALLETCONNECT_PROJECT_ID` also works. Local dev uses Reown's localhost-only demo project id so the wallet picker can be tested without extra setup.
