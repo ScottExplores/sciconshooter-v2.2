@@ -115,9 +115,6 @@ const App: React.FC = () => {
   const [showLabGlow, setShowLabGlow] = useState<boolean>(true);
   const [miniApp, setMiniApp] = useState<MiniAppState>(defaultMiniAppState);
   const [walletError, setWalletError] = useState<string>('');
-  const [donationStatus, setDonationStatus] = useState<DonationStatus>('idle');
-  const [donationHash, setDonationHash] = useState<string>('');
-  const [donationError, setDonationError] = useState<string>('');
   const [labFundingStatus, setLabFundingStatus] = useState<DonationStatus>('idle');
   const [labFundingHash, setLabFundingHash] = useState<string>('');
   const [labFundingError, setLabFundingError] = useState<string>('');
@@ -462,9 +459,6 @@ const App: React.FC = () => {
     localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
     disconnect();
     setWalletError('');
-    setDonationStatus('idle');
-    setDonationHash('');
-    setDonationError('');
     setLabFundingStatus('idle');
     setLabFundingHash('');
     setLabFundingError('');
@@ -481,56 +475,6 @@ const App: React.FC = () => {
     }
 
     return true;
-  };
-
-  const donateRsc = async (amount: number) => {
-    setDonationError('');
-
-    try {
-      const isReady = await ensureBaseConnection();
-      if (!isReady) {
-        return;
-      }
-
-      setDonationStatus(chainId === DONATION_CONFIG.BASE_CHAIN_ID ? 'processing' : 'switching_network');
-      setDonationHash('');
-
-      const hash = await writeContractAsync({
-        abi: erc20Abi,
-        address: DONATION_CONFIG.RSC_CONTRACT_ADDRESS as Address,
-        functionName: 'transfer',
-        args: [
-          DONATION_CONFIG.RECIPIENT_ADDRESS as Address,
-          parseUnits(amount.toString(), 18)
-        ]
-      });
-
-      setDonationHash(hash);
-      setDonationStatus('confirming');
-
-      const receipt = await waitForTransactionReceipt(config, { hash });
-      if (receipt.status !== 'success') {
-        throw new Error('Donation transaction reverted.');
-      }
-
-      setDonationStatus('success');
-      if (address) {
-        const walletKey = address.toLowerCase();
-        setDonatedWallets(prev => {
-          const next = { ...prev, [walletKey]: true };
-          localStorage.setItem(STORAGE_KEYS.DONATED_WALLETS, JSON.stringify(next));
-          return next;
-        });
-      }
-      setTimeout(() => {
-        setDonationStatus('idle');
-        setDonationHash('');
-      }, 5000);
-    } catch (error: any) {
-      console.error("Donation error", error);
-      setDonationStatus('error');
-      setDonationError(getUserFacingMessage(error, 'Donation cancelled.'));
-    }
   };
 
   const fundCurrentMission = async (rscAmount: number) => {
@@ -732,7 +676,6 @@ const App: React.FC = () => {
           wallet={wallet}
           onConnect={connectWallet}
           onDisconnect={disconnectWallet}
-          onDonate={donateRsc}
           onOpenSwap={openRscSwap}
         />
       ) : null}
@@ -773,6 +716,7 @@ const App: React.FC = () => {
           onOpenReferral={openReferral}
           onOpenFund={openResearchHubFund}
           onOpenProposal={openResearchHubProposal}
+          onOpenXProfile={() => miniAppService.openUrl(DONATION_CONFIG.X_PROFILE_URL)}
         />
       )}
 
@@ -883,12 +827,8 @@ const App: React.FC = () => {
                   <SupportPanel
                     wallet={wallet}
                     isMiniApp={miniApp.isMiniApp}
-                    donationStatus={donationStatus}
-                    donationHash={donationHash}
-                    donationError={donationError}
                     onConnect={connectWallet}
                     onDisconnect={disconnectWallet}
-                    onDonate={donateRsc}
                     compact
                   />
 

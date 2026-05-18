@@ -26,6 +26,8 @@ const builderDataSuffix = Attribution.toDataSuffix({
   codes: [DONATION_CONFIG.BUILDER_CODE]
 });
 
+const BASE_ACCOUNT_WALLET_ID = 'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa';
+
 const reownProjectId = (
   (import.meta.env.VITE_REOWN_PROJECT_ID as string | undefined)
   || (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined)
@@ -61,6 +63,7 @@ if (reownProjectId) {
   const wagmiAdapter = new WagmiAdapter({
     projectId: reownProjectId,
     networks: appKitNetworks,
+    dataSuffix: builderDataSuffix,
     connectors: [
       miniAppConnector,
       baseAccountConnector
@@ -79,20 +82,27 @@ if (reownProjectId) {
     metadata: appMetadata,
     projectId: reownProjectId,
     themeMode: 'dark',
-    defaultAccountTypes: { eip155: 'eoa' },
     enableMobileFullScreen: true,
     features: {
       analytics: false,
       email: false,
       socials: false,
       swaps: false,
-      onramp: false
+      onramp: false,
+      connectMethodsOrder: ['wallet']
     },
-    connectorTypeOrder: ['injected', 'featured', 'external', 'recommended', 'walletConnect', 'recent']
+    themeVariables: {
+      '--w3m-accent': '#0052FF'
+    },
+    featuredWalletIds: [BASE_ACCOUNT_WALLET_ID],
+    allWallets: 'SHOW',
+    enableWallets: true,
+    connectorTypeOrder: ['featured', 'injected', 'external', 'recommended', 'walletConnect', 'recent']
   });
 } else {
   activeWagmiConfig = createConfig({
     chains: [wagmiBase],
+    dataSuffix: builderDataSuffix,
     connectors: [
       miniAppConnector,
       injected({ shimDisconnect: true }),

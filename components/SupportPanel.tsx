@@ -1,16 +1,11 @@
 import React from 'react';
-import { DONATION_CONFIG } from '../constants';
-import { DonationStatus, WalletSession } from '../types';
+import { WalletSession } from '../types';
 
 interface SupportPanelProps {
   wallet: WalletSession;
   isMiniApp: boolean;
-  donationStatus: DonationStatus;
-  donationHash: string;
-  donationError: string;
   onConnect: () => void;
   onDisconnect: () => void;
-  onDonate: (amount: number) => void;
   compact?: boolean;
 }
 
@@ -19,16 +14,11 @@ const shortenAddress = (address: string) => `${address.slice(0, 6)}...${address.
 const SupportPanel: React.FC<SupportPanelProps> = ({
   wallet,
   isMiniApp,
-  donationStatus,
-  donationHash,
-  donationError,
   onConnect,
   onDisconnect,
-  onDonate,
   compact = false
 }) => {
   const isConnected = wallet.status === 'connected' && !!wallet.address;
-  const buttonRowClass = compact ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-3 gap-2 md:gap-3';
 
   return (
     <div className={`w-full rounded-2xl border border-cyan-500/20 bg-cyan-950/20 ${compact ? 'p-3' : 'p-3 md:p-4'}`}>
@@ -37,7 +27,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
           <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Wallet Access</h3>
           {!compact ? (
             <p className="mt-1 text-[10px] text-gray-400">
-              Connect once to fund mission credits and optionally send a support tip.
+              Connect once to fund mission credits from Lab Bay with RSC.
             </p>
           ) : null}
         </div>
@@ -79,39 +69,8 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
       </div>
 
       {isConnected ? (
-        <div className="mt-4 space-y-2">
-          <div className={buttonRowClass}>
-            {DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => (
-              <button
-                key={amount}
-                onClick={() => onDonate(amount)}
-                disabled={donationStatus === 'switching_network' || donationStatus === 'processing' || donationStatus === 'confirming'}
-                className="rounded-xl border border-cyan-400/30 bg-black/40 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition hover:border-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-60"
-              >
-                Tip {amount} RSC
-              </button>
-            ))}
-          </div>
-
-          <div className={`min-h-5 text-[10px] uppercase tracking-[0.18em] ${compact ? 'text-center' : ''}`}>
-            {donationStatus === 'switching_network' && <span className="text-yellow-300">Switching to Base...</span>}
-            {donationStatus === 'processing' && <span className="text-cyan-300">Check wallet to sign.</span>}
-            {donationStatus === 'confirming' && <span className="text-yellow-300">Waiting for confirmation...</span>}
-            {donationStatus === 'success' && <span className="text-emerald-300">Donation confirmed. Thank you.</span>}
-            {donationStatus === 'error' && <span className="text-red-300">{donationError}</span>}
-            {donationStatus === 'idle' && <span className="text-gray-500">{compact ? 'Tips are optional.' : 'Tips are optional. Lab purchases still use their own current-mission funding flow.'}</span>}
-          </div>
-
-          {donationHash ? (
-            <a
-              href={`${DONATION_CONFIG.EXPLORER_BASE_URL}/tx/${donationHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300 underline underline-offset-2 hover:text-white"
-            >
-              View donation on BaseScan
-            </a>
-          ) : null}
+        <div className={`mt-4 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-gray-400 ${compact ? 'text-center' : ''}`}>
+          RSC credit purchases are handled in Lab Bay. Tip jar returns after the destination wallet is confirmed.
         </div>
       ) : null}
     </div>

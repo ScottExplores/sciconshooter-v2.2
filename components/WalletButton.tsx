@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { DONATION_CONFIG } from '../constants';
 import { WalletSession } from '../types';
 
 interface WalletButtonProps {
   wallet: WalletSession;
   onConnect: (connectorId?: string) => void;
   onDisconnect: () => void;
-  onDonate: (amount: number) => void;
   onOpenSwap: () => void;
 }
 
@@ -16,7 +14,6 @@ const WalletButton: React.FC<WalletButtonProps> = ({
   wallet,
   onConnect,
   onDisconnect,
-  onDonate,
   onOpenSwap
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -65,18 +62,6 @@ const WalletButton: React.FC<WalletButtonProps> = ({
                   </span>
                   {wallet.connectorName ? <span className="text-gray-500">{wallet.connectorName}</span> : null}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => (
-                  <button
-                    key={amount}
-                    onClick={() => onDonate(amount)}
-                    className="rounded-xl border border-yellow-300/25 bg-yellow-500/10 px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-yellow-100 transition hover:border-yellow-200 hover:bg-yellow-400/15"
-                  >
-                    Tip {amount}
-                  </button>
-                ))}
               </div>
 
               <button
