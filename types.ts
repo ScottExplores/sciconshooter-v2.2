@@ -53,6 +53,10 @@ export interface LeaderboardEntry {
   date?: string; // New field for JSONBin data
   walletAddress?: string;
   donated?: boolean;
+  proposalId?: string;
+  proposalTitle?: string;
+  proposalUrl?: string;
+  proposalAuthor?: string;
 }
 
 export interface Stats {

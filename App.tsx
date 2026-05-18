@@ -25,9 +25,12 @@ import { DonationStatus, GameState, LeaderboardEntry, MiniAppState, PowerupType,
 import { audioService } from './services/audioService';
 import { ASSETS, DONATION_CONFIG, STORAGE_KEYS, UPGRADE_BASE_COSTS } from './constants';
 import { getScores, saveScore } from './services/leaderboardService';
+import { getResearchHubFundingProposals, ResearchHubProposal } from './services/researchHubProposals';
 import { miniAppService } from './services/miniAppService';
 import { getStoryBeatForPhase, StoryBeat } from './services/storyBeats';
 import { openReownConnectModal } from './providers';
+
+type ProposalFeedStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 const defaultMiniAppState: MiniAppState = {
   isMiniApp: false,
@@ -108,6 +111,9 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [gameId, setGameId] = useState<number>(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [fundingProposals, setFundingProposals] = useState<ResearchHubProposal[]>([]);
+  const [proposalStatus, setProposalStatus] = useState<ProposalFeedStatus>('loading');
+  const [selectedProposalId, setSelectedProposalId] = useState<string>('');
   const [playerNameInput, setPlayerNameInput] = useState<string>('');
   const [showNameInput, setShowNameInput] = useState<boolean>(false);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState<boolean>(false);
@@ -213,6 +219,35 @@ const App: React.FC = () => {
       fetchScores();
     }
   }, [gameState, leaderboard.length]);
+
+  useEffect(() => {
+    let active = true;
+
+    getResearchHubFundingProposals()
+      .then((nextProposals) => {
+        if (!active) return;
+        setFundingProposals(nextProposals);
+        setProposalStatus(nextProposals.length > 0 ? 'ready' : 'empty');
+      })
+      .catch((error) => {
+        console.error('ResearchHub proposal feed failed:', error);
+        if (!active) return;
+        setFundingProposals([]);
+        setProposalStatus('error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showNameInput || selectedProposalId || fundingProposals.length === 0) {
+      return;
+    }
+
+    setSelectedProposalId(fundingProposals[0].id);
+  }, [fundingProposals, selectedProposalId, showNameInput]);
 
   const getInitialStats = (): Stats => {
     const parsed = readSavedStats(address);
@@ -330,6 +365,7 @@ const App: React.FC = () => {
     setPurchasedPowerup(null);
     setShowNameInput(false);
     setPlayerNameInput('');
+    setSelectedProposalId('');
     setIsSubmittingScore(false);
     setGameId(prev => prev + 1);
     setGameState(GameState.TUTORIAL);
@@ -598,10 +634,13 @@ const App: React.FC = () => {
         if (!playerNameInput && address) {
           setPlayerNameInput(`0X${address.slice(2, 6)}`.toUpperCase());
         }
+        if (!selectedProposalId && fundingProposals.length > 0) {
+          setSelectedProposalId(fundingProposals[0].id);
+        }
         setShowNameInput(true);
       }
     }
-  }, [address, gameState, playerNameInput, stats.score, stats.highScore, leaderboard]);
+  }, [address, fundingProposals, gameState, playerNameInput, selectedProposalId, stats.score, stats.highScore, leaderboard]);
 
   const submitScore = async (e?: React.FormEvent) => {
     if (e) {
@@ -616,13 +655,21 @@ const App: React.FC = () => {
     const name = playerNameInput.trim().substring(0, 15).toUpperCase();
     const score = stats.score;
     const wave = stats.wave;
+    const selectedProposal = fundingProposals.find((proposal) => proposal.id === selectedProposalId) || fundingProposals[0];
+    const proposalSignal = selectedProposal ? {
+      proposalId: selectedProposal.id,
+      proposalTitle: selectedProposal.title,
+      proposalUrl: selectedProposal.url,
+      proposalAuthor: selectedProposal.author
+    } : {};
 
     const newEntry: LeaderboardEntry = {
       name,
       score,
       wave,
       walletAddress: address || undefined,
-      donated: wallet.hasDonated
+      donated: wallet.hasDonated,
+      ...proposalSignal
     };
     const optimisticList = [...leaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 25);
     setLeaderboard(optimisticList);
@@ -630,7 +677,8 @@ const App: React.FC = () => {
     try {
       const updatedScores = await saveScore(name, score, wave, {
         walletAddress: address,
-        donated: wallet.hasDonated
+        donated: wallet.hasDonated,
+        ...proposalSignal
       });
       if (updatedScores.length > 0) {
         setLeaderboard(updatedScores);
@@ -713,6 +761,8 @@ const App: React.FC = () => {
           onAbout={() => setGameState(GameState.ABOUT)}
           leaderboard={leaderboard}
           isLoading={loadingLeaderboard}
+          proposals={fundingProposals}
+          proposalStatus={proposalStatus}
           onOpenReferral={openReferral}
           onOpenFund={openResearchHubFund}
           onOpenProposal={openResearchHubProposal}
@@ -793,6 +843,54 @@ const App: React.FC = () => {
                       autoFocus
                       disabled={isSubmittingScore}
                     />
+
+                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
+                      <div className="mb-2">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Funding Signal</div>
+                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
+                          Pick the live ResearchHub proposal you want top pilots to steer funding credits toward.
+                        </p>
+                      </div>
+
+                      {proposalStatus === 'loading' ? (
+                        <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 animate-pulse">
+                          Loading live proposals...
+                        </div>
+                      ) : null}
+
+                      {(proposalStatus === 'empty' || proposalStatus === 'error') ? (
+                        <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
+                          Live proposal choices are unavailable. Your score can still be submitted.
+                        </div>
+                      ) : null}
+
+                      {fundingProposals.length > 0 ? (
+                        <div className="custom-scrollbar max-h-44 space-y-2 overflow-y-auto pr-1">
+                          {fundingProposals.map((proposal) => {
+                            const isSelected = selectedProposalId === proposal.id;
+
+                            return (
+                              <button
+                                type="button"
+                                key={proposal.id}
+                                onClick={() => setSelectedProposalId(proposal.id)}
+                                disabled={isSubmittingScore}
+                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-200 bg-emerald-300/20 text-white' : 'border-white/10 bg-black/25 text-slate-300 hover:border-emerald-200/50 hover:bg-emerald-300/10'}`}
+                              >
+                                <span className="flex items-start gap-2">
+                                  <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${isSelected ? 'bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.8)]' : 'bg-slate-600'}`}></span>
+                                  <span className="min-w-0">
+                                    <span className="line-clamp-2 text-xs font-black leading-snug">{proposal.title}</span>
+                                    <span className="mt-1 block truncate text-[10px] font-semibold text-slate-400">{proposal.author}</span>
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+
                     <button
                       type="submit"
                       disabled={!playerNameInput || isSubmittingScore}

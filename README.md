@@ -20,7 +20,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Y8dpXQRPnZfRavbYSvuY9u
 
 ## Global leaderboard
 
-The app submits scores to `/api/leaderboard`. Supabase is the recommended storage path because the game already tracks wallet addresses, RSC support badges, monthly events, and future proposal voting. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel:
+The app submits scores to `/api/leaderboard`. Supabase is the recommended storage path because the game already tracks wallet addresses, RSC support badges, monthly events, and proposal funding signals. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the table already exists, rerun the same SQL to add the proposal-signal columns safely:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`

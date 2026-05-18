@@ -6,9 +6,19 @@ create table if not exists public.scicon_leaderboard (
   date timestamptz not null default now(),
   wallet_address text,
   donated boolean not null default false,
+  proposal_id text,
+  proposal_title text,
+  proposal_url text,
+  proposal_author text,
   created_at timestamptz not null default now(),
   unique (name, score, wave, date)
 );
+
+alter table public.scicon_leaderboard
+  add column if not exists proposal_id text,
+  add column if not exists proposal_title text,
+  add column if not exists proposal_url text,
+  add column if not exists proposal_author text;
 
 create index if not exists scicon_leaderboard_score_idx
   on public.scicon_leaderboard (score desc, date desc);
@@ -16,5 +26,9 @@ create index if not exists scicon_leaderboard_score_idx
 create index if not exists scicon_leaderboard_wallet_idx
   on public.scicon_leaderboard (wallet_address)
   where wallet_address is not null;
+
+create index if not exists scicon_leaderboard_proposal_idx
+  on public.scicon_leaderboard (proposal_id)
+  where proposal_id is not null;
 
 alter table public.scicon_leaderboard enable row level security;

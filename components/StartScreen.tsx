@@ -2,15 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { LeaderboardEntry } from '../types';
 import {
   formatUsd,
-  getResearchHubFundingProposals,
   ResearchHubProposal
 } from '../services/researchHubProposals';
+
+type ProposalFeedStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 interface StartScreenProps {
   onStart: () => void;
   onAbout: () => void;
   leaderboard: LeaderboardEntry[];
   isLoading: boolean;
+  proposals: ResearchHubProposal[];
+  proposalStatus: ProposalFeedStatus;
   onOpenReferral: () => void;
   onOpenFund: () => void;
   onOpenProposal: (url: string) => void;
@@ -38,6 +41,8 @@ const StartScreen: React.FC<StartScreenProps> = ({
   onAbout,
   leaderboard,
   isLoading,
+  proposals,
+  proposalStatus,
   onOpenReferral,
   onOpenFund,
   onOpenProposal,
@@ -53,8 +58,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
   const [sendStatus, setSendStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [activeProposalIndex, setActiveProposalIndex] = useState(0);
   const [isProposalFlipping, setIsProposalFlipping] = useState(false);
-  const [proposals, setProposals] = useState<ResearchHubProposal[]>([]);
-  const [proposalStatus, setProposalStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
+  const [expandedFundingKey, setExpandedFundingKey] = useState<string | null>(null);
   const daysUntilAllocation = useMemo(getDaysUntilAllocation, []);
   const stackedProposals = useMemo(() => (
     proposals.length > 0 ? [0, 1, 2].slice(0, proposals.length).map((offset) => ({
@@ -62,27 +66,38 @@ const StartScreen: React.FC<StartScreenProps> = ({
       proposal: proposals[(activeProposalIndex + offset) % proposals.length]
     })) : []
   ), [activeProposalIndex, proposals]);
+  const proposalSignalLeaders = useMemo(() => {
+    const totals = new Map<string, {
+      id?: string;
+      title: string;
+      url?: string;
+      author?: string;
+      count: number;
+      totalImpact: number;
+    }>();
 
-  useEffect(() => {
-    let isMounted = true;
+    leaderboard.slice(0, 25).forEach((entry) => {
+      if (!entry.proposalTitle) return;
 
-    getResearchHubFundingProposals()
-      .then((nextProposals) => {
-        if (!isMounted) return;
-        setProposals(nextProposals);
-        setProposalStatus(nextProposals.length > 0 ? 'ready' : 'empty');
-      })
-      .catch((error) => {
-        console.error('ResearchHub proposal feed failed:', error);
-        if (!isMounted) return;
-        setProposals([]);
-        setProposalStatus('error');
-      });
+      const key = entry.proposalId || entry.proposalTitle;
+      const existing = totals.get(key) || {
+        id: entry.proposalId,
+        title: entry.proposalTitle,
+        url: entry.proposalUrl,
+        author: entry.proposalAuthor,
+        count: 0,
+        totalImpact: 0
+      };
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      existing.count += 1;
+      existing.totalImpact += entry.score;
+      totals.set(key, existing);
+    });
+
+    return Array.from(totals.values())
+      .sort((a, b) => b.count - a.count || b.totalImpact - a.totalImpact)
+      .slice(0, 3);
+  }, [leaderboard]);
 
   useEffect(() => {
     if (proposals.length < 2) return undefined;
@@ -221,23 +236,84 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   ) : leaderboard.length === 0 ? (
                     <div className="py-8 text-center text-xs font-semibold text-red-300">No global scores yet. First pilot gets the clean lane.</div>
                   ) : (
-                    leaderboard.slice(0, 25).map((entry, idx) => (
-                      <div
-                        key={`${entry.name}-${entry.score}-${entry.wave}-${idx}`}
-                        className={`grid grid-cols-[42px_1fr_44px_72px] items-center gap-2 rounded-xl px-3 py-2 font-mono text-[11px] font-bold transition ${idx === 0 ? 'bg-yellow-200 text-slate-950 shadow-[0_0_0_1px_rgba(250,204,21,.45)]' : 'bg-white/[0.045] text-slate-200 hover:bg-white/[0.075]'}`}
-                      >
-                        <span className={idx === 0 ? 'text-slate-950' : 'text-slate-500'}>#{idx + 1}</span>
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate">{entry.name}</span>
-                          {entry.donated ? <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-white">RSC</span> : null}
-                        </span>
-                        <span className="text-center text-blue-200">{entry.wave || 1}</span>
-                        <span className="text-right">{entry.score.toLocaleString()}</span>
-                      </div>
-                    ))
+                    leaderboard.slice(0, 25).map((entry, idx) => {
+                      const entryKey = `${entry.name}-${entry.score}-${entry.wave}-${entry.date || idx}`;
+                      const hasFundingSignal = Boolean(entry.proposalTitle);
+                      const isExpanded = expandedFundingKey === entryKey;
+                      const fundingTitle = entry.proposalTitle || 'No proposal selected';
+                      const title = hasFundingSignal ? `${entry.name} is steering credits toward: ${fundingTitle}` : undefined;
+
+                      return (
+                        <div
+                          key={entryKey}
+                          title={title}
+                          onClick={() => hasFundingSignal && setExpandedFundingKey(isExpanded ? null : entryKey)}
+                          className={`grid grid-cols-[42px_1fr_44px_72px] items-center gap-2 rounded-xl px-3 py-2 font-mono text-[11px] font-bold transition ${hasFundingSignal ? 'cursor-pointer' : ''} ${idx === 0 ? 'bg-yellow-200 text-slate-950 shadow-[0_0_0_1px_rgba(250,204,21,.45)]' : 'bg-white/[0.045] text-slate-200 hover:bg-white/[0.075]'}`}
+                        >
+                          <span className={idx === 0 ? 'text-slate-950' : 'text-slate-500'}>#{idx + 1}</span>
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate">{entry.name}</span>
+                            {entry.donated ? <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-white">RSC</span> : null}
+                            {hasFundingSignal ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] uppercase tracking-wide ${idx === 0 ? 'bg-slate-950/10 text-slate-900' : 'bg-emerald-400/15 text-emerald-200'}`}>Signal</span> : null}
+                          </span>
+                          <span className="text-center text-blue-200">{entry.wave || 1}</span>
+                          <span className="text-right">{entry.score.toLocaleString()}</span>
+
+                          {hasFundingSignal && isExpanded ? (
+                            <div className={`col-span-4 mt-1 rounded-xl border px-3 py-2 text-left text-[10px] leading-snug tracking-normal ${idx === 0 ? 'border-slate-950/15 bg-slate-950/10 text-slate-900' : 'border-emerald-300/15 bg-emerald-300/10 text-emerald-100'}`}>
+                              <div className="uppercase tracking-[0.14em] opacity-70">Funding signal</div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (entry.proposalUrl) onOpenProposal(entry.proposalUrl);
+                                }}
+                                className="mt-1 line-clamp-2 text-left font-sans text-xs font-black underline-offset-2 hover:underline"
+                              >
+                                {fundingTitle}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="mt-3 rounded-[20px] border border-emerald-300/15 bg-emerald-300/10 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Proposal Signals</h4>
+                  <p className="text-[10px] font-semibold text-slate-400">Top 25 pilots steering Scott's funding-credit pick.</p>
+                </div>
+                <span className="rounded-full border border-emerald-200/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-100">Votes</span>
+              </div>
+
+              {proposalSignalLeaders.length > 0 ? (
+                <div className="space-y-1">
+                  {proposalSignalLeaders.map((proposal, idx) => (
+                    <button
+                      type="button"
+                      key={`${proposal.id || proposal.title}-${idx}`}
+                      onClick={() => proposal.url && onOpenProposal(proposal.url)}
+                      className="grid w-full grid-cols-[28px_1fr_52px] items-center gap-2 rounded-xl bg-black/25 px-3 py-2 text-left transition hover:bg-black/35"
+                    >
+                      <span className="font-mono text-[10px] font-black text-emerald-200">#{idx + 1}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-black text-white">{proposal.title}</span>
+                        <span className="block truncate text-[10px] font-semibold text-slate-400">{proposal.author || 'ResearchHub proposal'}</span>
+                      </span>
+                      <span className="text-right font-mono text-xs font-black text-emerald-100">{proposal.count}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-black/20 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
+                  No funding signals yet. New top-25 pilots can pick a live proposal after submitting.
+                </div>
+              )}
             </div>
           </section>
 

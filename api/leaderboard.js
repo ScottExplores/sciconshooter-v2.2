@@ -32,6 +32,8 @@ const DEFAULT_SCORES = [
 ].map((entry) => ({ ...entry, date: new Date(0).toISOString() }));
 
 const DEFAULT_SCORE_KEYS = new Set(DEFAULT_SCORES.map((entry) => `${entry.name}|${entry.score}|${entry.wave}`));
+const LEGACY_SUPABASE_SELECT = 'name,score,wave,date,wallet_address,donated';
+const SUPABASE_SELECT = `${LEGACY_SUPABASE_SELECT},proposal_id,proposal_title,proposal_url,proposal_author`;
 
 const isDefaultSeedEntry = (entry) => (
   Boolean(entry) && DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
@@ -66,6 +68,21 @@ const sendJson = (res, status, payload) => {
   res.end(JSON.stringify(payload));
 };
 
+const sanitizeText = (value, maxLength) => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : undefined;
+};
+
+const sanitizeUrl = (value) => {
+  const url = sanitizeText(value, 500);
+  return url && /^https?:\/\//i.test(url) ? url : undefined;
+};
+
+const isMissingProposalColumnError = (error) => (
+  /proposal_|schema cache|column/i.test(error?.message || '')
+);
+
 const sanitizeEntry = (entry) => {
   if (!entry || typeof entry.name !== 'string' || typeof entry.score !== 'number') {
     return null;
@@ -80,7 +97,11 @@ const sanitizeEntry = (entry) => {
     wave: typeof entry.wave === 'number' ? Math.max(1, Math.floor(entry.wave)) : 1,
     date: typeof entry.date === 'string' ? entry.date : new Date().toISOString(),
     walletAddress: typeof entry.walletAddress === 'string' ? entry.walletAddress.toLowerCase() : undefined,
-    donated: Boolean(entry.donated)
+    donated: Boolean(entry.donated),
+    proposalId: sanitizeText(entry.proposalId, 80),
+    proposalTitle: sanitizeText(entry.proposalTitle, 180),
+    proposalUrl: sanitizeUrl(entry.proposalUrl),
+    proposalAuthor: sanitizeText(entry.proposalAuthor, 100)
   };
 };
 
@@ -164,7 +185,20 @@ const toSupabaseRow = (entry) => ({
   wave: entry.wave,
   date: entry.date,
   wallet_address: entry.walletAddress || null,
-  donated: Boolean(entry.donated)
+  donated: Boolean(entry.donated),
+  proposal_id: entry.proposalId || null,
+  proposal_title: entry.proposalTitle || null,
+  proposal_url: entry.proposalUrl || null,
+  proposal_author: entry.proposalAuthor || null
+});
+
+const withoutProposalColumns = (row) => ({
+  name: row.name,
+  score: row.score,
+  wave: row.wave,
+  date: row.date,
+  wallet_address: row.wallet_address || null,
+  donated: Boolean(row.donated)
 });
 
 const fromSupabaseRow = (row) => sanitizeEntry({
@@ -173,11 +207,15 @@ const fromSupabaseRow = (row) => sanitizeEntry({
   wave: row.wave,
   date: row.date,
   walletAddress: row.wallet_address,
-  donated: row.donated
+  donated: row.donated,
+  proposalId: row.proposal_id,
+  proposalTitle: row.proposal_title,
+  proposalUrl: row.proposal_url,
+  proposalAuthor: row.proposal_author
 });
 
-const readSupabaseScores = async () => {
-  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=name,score,wave,date,wallet_address,donated&order=score.desc,date.desc&limit=${MAX_SCORES}`), {
+const requestSupabaseScores = async (selectColumns) => {
+  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=${selectColumns}&order=score.desc,date.desc&limit=${MAX_SCORES}`), {
     headers: supabaseHeaders()
   });
 
@@ -186,11 +224,41 @@ const readSupabaseScores = async () => {
     throw new Error(`Supabase leaderboard fetch failed with ${response.status}: ${details}`);
   }
 
-  const rows = await response.json();
+  return response.json();
+};
+
+const readSupabaseScores = async () => {
+  let rows;
+
+  try {
+    rows = await requestSupabaseScores(SUPABASE_SELECT);
+  } catch (error) {
+    if (!isMissingProposalColumnError(error)) {
+      throw error;
+    }
+
+    rows = await requestSupabaseScores(LEGACY_SUPABASE_SELECT);
+  }
+
   const scores = Array.isArray(rows)
     ? rows.map(fromSupabaseRow).filter(Boolean).filter((score) => !isDefaultSeedEntry(score))
     : [];
   return scores.length > 0 ? dedupeAndSort(scores) : dedupeAndSort(DEFAULT_SCORES);
+};
+
+const insertSupabaseRows = async (rows) => {
+  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?on_conflict=name,score,wave,date`), {
+    method: 'POST',
+    headers: supabaseHeaders({
+      Prefer: 'resolution=ignore-duplicates,return=minimal'
+    }),
+    body: JSON.stringify(rows)
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Supabase leaderboard save failed with ${response.status}: ${details}`);
+  }
 };
 
 const writeSupabaseScores = async (scores) => {
@@ -199,17 +267,15 @@ const writeSupabaseScores = async (scores) => {
     .map(toSupabaseRow);
 
   if (rows.length > 0) {
-    const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?on_conflict=name,score,wave,date`), {
-      method: 'POST',
-      headers: supabaseHeaders({
-        Prefer: 'resolution=ignore-duplicates,return=minimal'
-      }),
-      body: JSON.stringify(rows)
-    });
+    try {
+      await insertSupabaseRows(rows);
+    } catch (error) {
+      if (!isMissingProposalColumnError(error)) {
+        throw error;
+      }
 
-    if (!response.ok) {
-      const details = await response.text();
-      throw new Error(`Supabase leaderboard save failed with ${response.status}: ${details}`);
+      // Keeps legacy deployments alive until the Supabase migration below is applied.
+      await insertSupabaseRows(rows.map(withoutProposalColumns));
     }
   }
 

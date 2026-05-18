@@ -40,6 +40,17 @@ const isDefaultSeedEntry = (entry: LeaderboardEntry) => (
   DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
 );
 
+const sanitizeText = (value: unknown, maxLength: number): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : undefined;
+};
+
+const sanitizeUrl = (value: unknown): string | undefined => {
+  const url = sanitizeText(value, 500);
+  return url && /^https?:\/\//i.test(url) ? url : undefined;
+};
+
 const sanitizeEntry = (entry: Partial<LeaderboardEntry> | null | undefined): LeaderboardEntry | null => {
   if (!entry || typeof entry.name !== 'string' || typeof entry.score !== 'number') {
     return null;
@@ -51,7 +62,11 @@ const sanitizeEntry = (entry: Partial<LeaderboardEntry> | null | undefined): Lea
     wave: typeof entry.wave === 'number' ? Math.max(1, Math.floor(entry.wave)) : 1,
     date: entry.date || new Date().toISOString(),
     walletAddress: typeof entry.walletAddress === 'string' ? entry.walletAddress.toLowerCase() : undefined,
-    donated: Boolean(entry.donated)
+    donated: Boolean(entry.donated),
+    proposalId: sanitizeText(entry.proposalId, 80),
+    proposalTitle: sanitizeText(entry.proposalTitle, 180),
+    proposalUrl: sanitizeUrl(entry.proposalUrl),
+    proposalAuthor: sanitizeText(entry.proposalAuthor, 100)
   };
 };
 
@@ -168,7 +183,14 @@ export const saveScore = async (
   name: string,
   score: number,
   wave: number,
-  options: { walletAddress?: string | null; donated?: boolean } = {}
+  options: {
+    walletAddress?: string | null;
+    donated?: boolean;
+    proposalId?: string;
+    proposalTitle?: string;
+    proposalUrl?: string;
+    proposalAuthor?: string;
+  } = {}
 ): Promise<LeaderboardEntry[]> => {
   const newEntry: LeaderboardEntry = {
     name: name.trim().substring(0, 15).toUpperCase(),
@@ -176,7 +198,11 @@ export const saveScore = async (
     wave: Math.max(1, Math.floor(wave)),
     date: new Date().toISOString(),
     walletAddress: options.walletAddress ? options.walletAddress.toLowerCase() : undefined,
-    donated: Boolean(options.donated)
+    donated: Boolean(options.donated),
+    proposalId: sanitizeText(options.proposalId, 80),
+    proposalTitle: sanitizeText(options.proposalTitle, 180),
+    proposalUrl: sanitizeUrl(options.proposalUrl),
+    proposalAuthor: sanitizeText(options.proposalAuthor, 100)
   };
 
   const currentLocalArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
