@@ -3,41 +3,8 @@ const MAX_MONTHLY_SCORES = 5;
 const SYNC_SCORE_LIMIT = 100;
 const SUPABASE_TABLE = process.env.SUPABASE_LEADERBOARD_TABLE || 'scicon_leaderboard';
 
-const DEFAULT_SCORES = [
-  { name: 'BRIAN', score: 100, wave: 2 },
-  { name: 'JEFFREY', score: 98, wave: 2 },
-  { name: 'TYLER', score: 96, wave: 1 },
-  { name: 'BASE', score: 94, wave: 1 },
-  { name: 'PATRICK', score: 92, wave: 1 },
-  { name: 'SCOTT', score: 90, wave: 1 },
-  { name: 'KOBOLD', score: 88, wave: 1 },
-  { name: 'ANTON', score: 86, wave: 1 },
-  { name: 'NAMAN', score: 84, wave: 1 },
-  { name: 'ED', score: 82, wave: 1 },
-  { name: 'CALEB', score: 80, wave: 1 },
-  { name: 'SANA', score: 78, wave: 1 },
-  { name: 'JESSE', score: 76, wave: 1 },
-  { name: 'LOUIE', score: 74, wave: 1 },
-  { name: 'VITALIK', score: 72, wave: 1 },
-  { name: 'SATOSHI', score: 70, wave: 1 },
-  { name: 'REVIEWER 2', score: 68, wave: 1 },
-  { name: 'GUEST 1', score: 65, wave: 1 },
-  { name: 'GUEST 2', score: 60, wave: 1 },
-  { name: 'GUEST 3', score: 55, wave: 1 },
-  { name: 'GUEST 4', score: 50, wave: 1 },
-  { name: 'GUEST 5', score: 45, wave: 1 },
-  { name: 'GUEST 6', score: 40, wave: 1 },
-  { name: 'GUEST 7', score: 35, wave: 1 },
-  { name: 'GUEST 8', score: 30, wave: 1 }
-].map((entry) => ({ ...entry, date: new Date(0).toISOString() }));
-
-const DEFAULT_SCORE_KEYS = new Set(DEFAULT_SCORES.map((entry) => `${entry.name}|${entry.score}|${entry.wave}`));
 const LEGACY_SUPABASE_SELECT = 'name,score,wave,date,wallet_address,donated';
 const SUPABASE_SELECT = `${LEGACY_SUPABASE_SELECT},proposal_id,proposal_title,proposal_url,proposal_author`;
-
-const isDefaultSeedEntry = (entry) => (
-  Boolean(entry) && DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
-);
 
 const getSupabaseConfig = () => ({
   url: process.env.SUPABASE_URL,
@@ -223,9 +190,9 @@ const readSupabaseScores = async () => {
     ...(Array.isArray(monthlyRows) ? monthlyRows : [])
   ];
   const scores = combinedRows.length > 0
-    ? combinedRows.map(fromSupabaseRow).filter(Boolean).filter((score) => !isDefaultSeedEntry(score))
+    ? combinedRows.map(fromSupabaseRow).filter(Boolean)
     : [];
-  return scores.length > 0 ? dedupeAndSort(scores, SYNC_SCORE_LIMIT) : dedupeAndSort(DEFAULT_SCORES, SYNC_SCORE_LIMIT);
+  return dedupeAndSort(scores, SYNC_SCORE_LIMIT);
 };
 
 const insertSupabaseRows = async (rows) => {
@@ -245,7 +212,6 @@ const insertSupabaseRows = async (rows) => {
 
 const writeSupabaseScores = async (scores) => {
   const rows = dedupeAndSort(scores, SYNC_SCORE_LIMIT)
-    .filter((score) => !isDefaultSeedEntry(score))
     .map(toSupabaseRow);
 
   if (rows.length > 0) {

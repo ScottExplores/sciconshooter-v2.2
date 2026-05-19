@@ -36,6 +36,8 @@ Monthly winner archiving is handled by Vercel Cron. At 00:10 UTC on the first da
 
 Optional notifications: set `MONTHLY_WINNER_WEBHOOK_URL` to a Zapier, Make, Discord, Slack, or email-service webhook. The archive job will post the winner payload there after saving it in Supabase. Set `MONTHLY_ALLOCATION_RSC` if the monthly allocation changes from 500.
 
+To intentionally start over with a clean leaderboard, run `supabase/reset-leaderboard.sql` once in the Supabase SQL Editor. Do not add that reset SQL to normal migrations because it deletes all leaderboard rows.
+
 For local testing against a deployed leaderboard, set `VITE_LEADERBOARD_API_URL` in `.env.local` to the deployed API URL, such as `https://your-app.vercel.app/api/leaderboard`. For local testing against Supabase directly through the local Vite API middleware, add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to your shell environment before running `npm run dev`.
 
 ## Wallet testing
