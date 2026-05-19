@@ -24,7 +24,7 @@ import UpgradeCoach from './components/UpgradeCoach';
 import { DonationStatus, GameState, LeaderboardEntry, MiniAppState, PowerupType, Stats, Upgrades, WalletSession } from './types';
 import { audioService } from './services/audioService';
 import { ASSETS, DONATION_CONFIG, STORAGE_KEYS, UPGRADE_BASE_COSTS } from './constants';
-import { getScores, saveScore } from './services/leaderboardService';
+import { getLeaderboardData, saveScore } from './services/leaderboardService';
 import { getResearchHubFundingProposals, ResearchHubProposal } from './services/researchHubProposals';
 import { miniAppService } from './services/miniAppService';
 import { getStoryBeatForPhase, StoryBeat } from './services/storyBeats';
@@ -111,6 +111,7 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [gameId, setGameId] = useState<number>(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [monthlyLeaderboard, setMonthlyLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [fundingProposals, setFundingProposals] = useState<ResearchHubProposal[]>([]);
   const [proposalStatus, setProposalStatus] = useState<ProposalFeedStatus>('loading');
   const [selectedProposalId, setSelectedProposalId] = useState<string>('');
@@ -202,10 +203,11 @@ const App: React.FC = () => {
       }
 
       try {
-        const scores = await getScores();
-        if (scores && scores.length > 0) {
-          setLeaderboard(scores);
+        const data = await getLeaderboardData();
+        if (data.scores.length > 0) {
+          setLeaderboard(data.scores);
         }
+        setMonthlyLeaderboard(data.monthlyScores);
       } catch (error) {
         console.error("Failed to fetch leaderboard", error);
       } finally {
@@ -627,20 +629,25 @@ const App: React.FC = () => {
         setStats(s => ({ ...s, highScore: s.score }));
       }
 
-      const sorted = [...leaderboard].sort((a, b) => b.score - a.score);
-      const lowestScore = sorted.length < 25 ? 0 : sorted[Math.min(sorted.length - 1, 24)].score;
+      const allTimeSorted = [...leaderboard].sort((a, b) => b.score - a.score);
+      const monthlySorted = [...monthlyLeaderboard].sort((a, b) => b.score - a.score);
+      const lowestAllTimeScore = allTimeSorted.length < 25 ? 0 : allTimeSorted[Math.min(allTimeSorted.length - 1, 24)].score;
+      const lowestMonthlyScore = monthlySorted.length < 5 ? 0 : monthlySorted[Math.min(monthlySorted.length - 1, 4)].score;
+      const isAllTimeTop25 = allTimeSorted.length < 25 || stats.score >= lowestAllTimeScore;
+      const isMonthlyTop5 = monthlySorted.length < 5 || stats.score >= lowestMonthlyScore;
+      const isMonthlyChampion = monthlySorted.length === 0 || stats.score >= monthlySorted[0].score;
 
-      if (stats.score > 0 && (sorted.length < 25 || stats.score >= lowestScore)) {
+      if (stats.score > 0 && (isMonthlyTop5 || isAllTimeTop25)) {
         if (!playerNameInput && address) {
           setPlayerNameInput(`0X${address.slice(2, 6)}`.toUpperCase());
         }
-        if (!selectedProposalId && fundingProposals.length > 0) {
+        if (isMonthlyChampion && !selectedProposalId && fundingProposals.length > 0) {
           setSelectedProposalId(fundingProposals[0].id);
         }
         setShowNameInput(true);
       }
     }
-  }, [address, fundingProposals, gameState, playerNameInput, selectedProposalId, stats.score, stats.highScore, leaderboard]);
+  }, [address, fundingProposals, gameState, monthlyLeaderboard, playerNameInput, selectedProposalId, stats.score, stats.highScore, leaderboard]);
 
   const submitScore = async (e?: React.FormEvent) => {
     if (e) {
@@ -655,7 +662,11 @@ const App: React.FC = () => {
     const name = playerNameInput.trim().substring(0, 15).toUpperCase();
     const score = stats.score;
     const wave = stats.wave;
-    const selectedProposal = fundingProposals.find((proposal) => proposal.id === selectedProposalId) || fundingProposals[0];
+    const submittedAt = new Date().toISOString();
+    const isMonthlyChampionSubmission = monthlyLeaderboard.length === 0 || score >= monthlyLeaderboard[0].score;
+    const selectedProposal = isMonthlyChampionSubmission
+      ? fundingProposals.find((proposal) => proposal.id === selectedProposalId) || fundingProposals[0]
+      : undefined;
     const proposalSignal = selectedProposal ? {
       proposalId: selectedProposal.id,
       proposalTitle: selectedProposal.title,
@@ -667,22 +678,26 @@ const App: React.FC = () => {
       name,
       score,
       wave,
+      date: submittedAt,
       walletAddress: address || undefined,
       donated: wallet.hasDonated,
       ...proposalSignal
     };
     const optimisticList = [...leaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 25);
+    const optimisticMonthlyList = [...monthlyLeaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 5);
     setLeaderboard(optimisticList);
+    setMonthlyLeaderboard(optimisticMonthlyList);
 
     try {
-      const updatedScores = await saveScore(name, score, wave, {
+      const updatedData = await saveScore(name, score, wave, {
         walletAddress: address,
         donated: wallet.hasDonated,
         ...proposalSignal
       });
-      if (updatedScores.length > 0) {
-        setLeaderboard(updatedScores);
+      if (updatedData.scores.length > 0) {
+        setLeaderboard(updatedData.scores);
       }
+      setMonthlyLeaderboard(updatedData.monthlyScores);
     } catch (error) {
       console.error("Score submission error", error);
     }
@@ -716,6 +731,9 @@ const App: React.FC = () => {
   };
 
   const pubStatus = getPubStatus(stats.score);
+  const canSelectFundingProposal = showNameInput
+    && stats.score > 0
+    && (monthlyLeaderboard.length === 0 || stats.score >= monthlyLeaderboard[0].score);
 
   return (
     <div className="relative h-full w-full select-none bg-[#0b1020]">
@@ -759,7 +777,8 @@ const App: React.FC = () => {
         <StartScreen
           onStart={startGame}
           onAbout={() => setGameState(GameState.ABOUT)}
-          leaderboard={leaderboard}
+          allTimeLeaderboard={leaderboard}
+          monthlyLeaderboard={monthlyLeaderboard}
           isLoading={loadingLeaderboard}
           proposals={fundingProposals}
           proposalStatus={proposalStatus}
@@ -844,52 +863,71 @@ const App: React.FC = () => {
                       disabled={isSubmittingScore}
                     />
 
-                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
-                      <div className="mb-2">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Funding Signal</div>
-                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
-                          Pick the live ResearchHub proposal you want top pilots to steer funding credits toward.
-                        </p>
-                      </div>
-
-                      {proposalStatus === 'loading' ? (
-                        <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 animate-pulse">
-                          Loading live proposals...
+                    {canSelectFundingProposal ? (
+                      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
+                        <div className="mb-2">
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Monthly No. 1 Funding Pick</div>
+                          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
+                            You are taking the monthly lead. Choose the live ResearchHub proposal for the 500 RSC funding-credit signal.
+                          </p>
                         </div>
-                      ) : null}
 
-                      {(proposalStatus === 'empty' || proposalStatus === 'error') ? (
-                        <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
-                          Live proposal choices are unavailable. Your score can still be submitted.
-                        </div>
-                      ) : null}
+                        {proposalStatus === 'loading' ? (
+                          <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 animate-pulse">
+                            Loading live proposals...
+                          </div>
+                        ) : null}
 
-                      {fundingProposals.length > 0 ? (
-                        <div className="custom-scrollbar max-h-44 space-y-2 overflow-y-auto pr-1">
-                          {fundingProposals.map((proposal) => {
-                            const isSelected = selectedProposalId === proposal.id;
+                        {(proposalStatus === 'empty' || proposalStatus === 'error') ? (
+                          <div className="rounded-xl bg-black/25 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
+                            Live proposal choices are unavailable. Your score can still be submitted.
+                          </div>
+                        ) : null}
 
-                            return (
-                              <button
-                                type="button"
-                                key={proposal.id}
-                                onClick={() => setSelectedProposalId(proposal.id)}
-                                disabled={isSubmittingScore}
-                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-200 bg-emerald-300/20 text-white' : 'border-white/10 bg-black/25 text-slate-300 hover:border-emerald-200/50 hover:bg-emerald-300/10'}`}
-                              >
-                                <span className="flex items-start gap-2">
-                                  <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${isSelected ? 'bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.8)]' : 'bg-slate-600'}`}></span>
-                                  <span className="min-w-0">
-                                    <span className="line-clamp-2 text-xs font-black leading-snug">{proposal.title}</span>
-                                    <span className="mt-1 block truncate text-[10px] font-semibold text-slate-400">{proposal.author}</span>
+                        {fundingProposals.length > 0 ? (
+                          <div className="custom-scrollbar max-h-64 space-y-3 overflow-y-auto pr-1">
+                            {fundingProposals.map((proposal) => {
+                              const isSelected = selectedProposalId === proposal.id;
+
+                              return (
+                                <button
+                                  type="button"
+                                  key={proposal.id}
+                                  onClick={() => setSelectedProposalId(proposal.id)}
+                                  disabled={isSubmittingScore}
+                                  className={`w-full rounded-2xl border bg-white p-2 text-left text-slate-950 shadow-[0_14px_34px_rgba(0,0,0,0.22)] transition ${isSelected ? 'border-emerald-300 ring-2 ring-emerald-300/60' : 'border-slate-200 hover:border-emerald-300/70'}`}
+                                >
+                                  <span className="flex gap-3">
+                                    <span className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                      {proposal.imageUrl ? (
+                                        <img src={proposal.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                      ) : (
+                                        <span className="flex h-full w-full items-center justify-center bg-slate-950 text-lg font-black text-white">
+                                          {(proposal.author || 'RH').split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'RH'}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="line-clamp-2 text-sm font-black leading-snug">{proposal.title}</span>
+                                      <span className="mt-1 block truncate text-[11px] font-semibold text-slate-500">{proposal.author}</span>
+                                      <span className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-50 p-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                        <span>Ask <strong className="block text-xs text-blue-600">{proposal.requestedUsd ? `$${Math.round(proposal.requestedUsd / 1000)}K` : 'N/A'}</strong></span>
+                                        <span>Raised <strong className="block text-xs text-slate-950">{proposal.raisedUsd ? `$${Math.round(proposal.raisedUsd / 1000)}K` : 'N/A'}</strong></span>
+                                        <span>Review <strong className="block text-xs text-slate-950">{proposal.peerReview?.toFixed(1) ?? 'N/A'}</strong></span>
+                                      </span>
+                                    </span>
                                   </span>
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center text-[11px] font-semibold leading-relaxed text-slate-400">
+                        Proposal selection unlocks only for the monthly No. 1 pilot. This score still counts for monthly top 5 and all-time top 25.
+                      </div>
+                    )}
 
                     <button
                       type="submit"
@@ -988,7 +1026,7 @@ const App: React.FC = () => {
                 <div>
                   <strong className="text-indigo-400">FUNDING EVENT:</strong>
                   <p className="mt-1">
-                    The monthly leaderboard can be used as a community signal: top pilots nominate a ResearchHub proposal, and Scott can direct funding credits toward the winner's pick.
+                    The monthly leaderboard now acts as the funding signal: the No. 1 pilot chooses a ResearchHub proposal, and Scott can direct funding credits toward that winner's pick.
                   </p>
                 </div>
                 <p className="mt-4 border-t border-gray-700 pt-2 text-xs italic text-gray-500">

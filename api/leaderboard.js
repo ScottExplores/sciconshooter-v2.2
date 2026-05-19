@@ -1,4 +1,5 @@
 const MAX_SCORES = 25;
+const MAX_MONTHLY_SCORES = 5;
 const SYNC_SCORE_LIMIT = 100;
 const LEADERBOARD_KEY = process.env.LEADERBOARD_KV_KEY || 'scicon-shooter:leaderboard';
 const SUPABASE_TABLE = process.env.SUPABASE_LEADERBOARD_TABLE || 'scicon_leaderboard';
@@ -83,6 +84,20 @@ const isMissingProposalColumnError = (error) => (
   /proposal_|schema cache|column/i.test(error?.message || '')
 );
 
+const getCurrentMonthRange = () => {
+  const now = new Date();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), 1),
+    end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  };
+};
+
+const isCurrentMonthEntry = (entry) => {
+  const timestamp = new Date(entry.date || 0).getTime();
+  const { start, end } = getCurrentMonthRange();
+  return Number.isFinite(timestamp) && timestamp >= start.getTime() && timestamp < end.getTime();
+};
+
 const sanitizeEntry = (entry) => {
   if (!entry || typeof entry.name !== 'string' || typeof entry.score !== 'number') {
     return null;
@@ -125,6 +140,14 @@ const dedupeAndSort = (scores, limit = MAX_SCORES) => {
   return normalized.slice(0, limit);
 };
 
+const toLeaderboardPayload = (scores) => {
+  const archive = dedupeAndSort(scores, SYNC_SCORE_LIMIT);
+  return {
+    scores: dedupeAndSort(archive, MAX_SCORES),
+    monthlyScores: dedupeAndSort(archive.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES)
+  };
+};
+
 const redisCommand = async (command) => {
   const { url, token } = getRedisConfig();
   if (!url || !token) {
@@ -150,18 +173,18 @@ const redisCommand = async (command) => {
 const readRedisScores = async () => {
   const data = await redisCommand(['GET', LEADERBOARD_KEY]);
   if (!data.result) {
-    return dedupeAndSort(DEFAULT_SCORES);
+    return dedupeAndSort(DEFAULT_SCORES, SYNC_SCORE_LIMIT);
   }
 
   const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
   const scores = Array.isArray(parsed.scores) ? parsed.scores : parsed;
-  return dedupeAndSort(Array.isArray(scores) ? scores : DEFAULT_SCORES);
+  return dedupeAndSort(Array.isArray(scores) ? scores : DEFAULT_SCORES, SYNC_SCORE_LIMIT);
 };
 
 const writeRedisScores = async (scores) => {
-  const topScores = dedupeAndSort(scores);
-  await redisCommand(['SET', LEADERBOARD_KEY, JSON.stringify({ scores: topScores })]);
-  return topScores;
+  const archive = dedupeAndSort(scores, SYNC_SCORE_LIMIT);
+  await redisCommand(['SET', LEADERBOARD_KEY, JSON.stringify({ scores: archive })]);
+  return archive;
 };
 
 const supabaseUrl = (path) => {
@@ -214,8 +237,8 @@ const fromSupabaseRow = (row) => sanitizeEntry({
   proposalAuthor: row.proposal_author
 });
 
-const requestSupabaseScores = async (selectColumns) => {
-  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=${selectColumns}&order=score.desc,date.desc&limit=${MAX_SCORES}`), {
+const requestSupabaseScores = async (selectColumns, query = '') => {
+  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=${selectColumns}&order=score.desc,date.desc${query}`), {
     headers: supabaseHeaders()
   });
 
@@ -228,22 +251,31 @@ const requestSupabaseScores = async (selectColumns) => {
 };
 
 const readSupabaseScores = async () => {
+  const { start, end } = getCurrentMonthRange();
+  const monthlyQuery = `&date=gte.${encodeURIComponent(start.toISOString())}&date=lt.${encodeURIComponent(end.toISOString())}&limit=${MAX_MONTHLY_SCORES}`;
   let rows;
+  let monthlyRows;
 
   try {
-    rows = await requestSupabaseScores(SUPABASE_SELECT);
+    rows = await requestSupabaseScores(SUPABASE_SELECT, `&limit=${SYNC_SCORE_LIMIT}`);
+    monthlyRows = await requestSupabaseScores(SUPABASE_SELECT, monthlyQuery);
   } catch (error) {
     if (!isMissingProposalColumnError(error)) {
       throw error;
     }
 
-    rows = await requestSupabaseScores(LEGACY_SUPABASE_SELECT);
+    rows = await requestSupabaseScores(LEGACY_SUPABASE_SELECT, `&limit=${SYNC_SCORE_LIMIT}`);
+    monthlyRows = await requestSupabaseScores(LEGACY_SUPABASE_SELECT, monthlyQuery);
   }
 
-  const scores = Array.isArray(rows)
-    ? rows.map(fromSupabaseRow).filter(Boolean).filter((score) => !isDefaultSeedEntry(score))
+  const combinedRows = [
+    ...(Array.isArray(rows) ? rows : []),
+    ...(Array.isArray(monthlyRows) ? monthlyRows : [])
+  ];
+  const scores = combinedRows.length > 0
+    ? combinedRows.map(fromSupabaseRow).filter(Boolean).filter((score) => !isDefaultSeedEntry(score))
     : [];
-  return scores.length > 0 ? dedupeAndSort(scores) : dedupeAndSort(DEFAULT_SCORES);
+  return scores.length > 0 ? dedupeAndSort(scores, SYNC_SCORE_LIMIT) : dedupeAndSort(DEFAULT_SCORES, SYNC_SCORE_LIMIT);
 };
 
 const insertSupabaseRows = async (rows) => {
@@ -327,7 +359,7 @@ module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
       const scores = await readScores();
-      return sendJson(res, 200, { scores });
+      return sendJson(res, 200, toLeaderboardPayload(scores));
     }
 
     if (req.method === 'POST') {
@@ -341,7 +373,7 @@ module.exports = async (req, res) => {
       }
 
       const scores = await writeScores([...currentScores, ...submittedScores, entry].filter(Boolean));
-      return sendJson(res, 200, { scores });
+      return sendJson(res, 200, toLeaderboardPayload(scores));
     }
 
     return sendJson(res, 405, { error: 'Method not allowed' });

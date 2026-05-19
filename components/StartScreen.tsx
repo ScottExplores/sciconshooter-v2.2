@@ -10,7 +10,8 @@ type ProposalFeedStatus = 'loading' | 'ready' | 'empty' | 'error';
 interface StartScreenProps {
   onStart: () => void;
   onAbout: () => void;
-  leaderboard: LeaderboardEntry[];
+  allTimeLeaderboard: LeaderboardEntry[];
+  monthlyLeaderboard: LeaderboardEntry[];
   isLoading: boolean;
   proposals: ResearchHubProposal[];
   proposalStatus: ProposalFeedStatus;
@@ -20,10 +21,17 @@ interface StartScreenProps {
   onOpenXProfile: () => void;
 }
 
-const getDaysUntilAllocation = () => {
+type LeaderboardView = 'monthly' | 'allTime';
+
+const getMonthlyAllocationMeta = () => {
   const now = new Date();
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return Math.max(1, Math.ceil((nextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  return {
+    daysLeft: Math.max(0, lastDay.getDate() - now.getDate()),
+    endLabel: lastDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    allocationRsc: 500
+  };
 };
 
 const getInitials = (name: string) => (
@@ -39,7 +47,8 @@ const getInitials = (name: string) => (
 const StartScreen: React.FC<StartScreenProps> = ({
   onStart,
   onAbout,
-  leaderboard,
+  allTimeLeaderboard,
+  monthlyLeaderboard,
   isLoading,
   proposals,
   proposalStatus,
@@ -59,45 +68,28 @@ const StartScreen: React.FC<StartScreenProps> = ({
   const [activeProposalIndex, setActiveProposalIndex] = useState(0);
   const [isProposalFlipping, setIsProposalFlipping] = useState(false);
   const [expandedFundingKey, setExpandedFundingKey] = useState<string | null>(null);
-  const daysUntilAllocation = useMemo(getDaysUntilAllocation, []);
+  const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>('monthly');
+  const [showAllocationAmount, setShowAllocationAmount] = useState(false);
+  const monthlyAllocation = useMemo(getMonthlyAllocationMeta, []);
+  const visibleLeaderboard = leaderboardView === 'monthly'
+    ? monthlyLeaderboard.slice(0, 5)
+    : allTimeLeaderboard.slice(0, 25);
+  const monthlyChampion = monthlyLeaderboard[0];
+  const monthlyChampionProposal = monthlyChampion?.proposalTitle ? {
+    id: monthlyChampion.proposalId,
+    title: monthlyChampion.proposalTitle,
+    url: monthlyChampion.proposalUrl,
+    author: monthlyChampion.proposalAuthor,
+    pilot: monthlyChampion.name
+  } : null;
+  const isChampionProposal = (proposal: ResearchHubProposal) => Boolean(monthlyChampionProposal)
+    && (proposal.id === monthlyChampionProposal?.id || proposal.title === monthlyChampionProposal?.title);
   const stackedProposals = useMemo(() => (
     proposals.length > 0 ? [0, 1, 2].slice(0, proposals.length).map((offset) => ({
       offset,
       proposal: proposals[(activeProposalIndex + offset) % proposals.length]
     })) : []
   ), [activeProposalIndex, proposals]);
-  const proposalSignalLeaders = useMemo(() => {
-    const totals = new Map<string, {
-      id?: string;
-      title: string;
-      url?: string;
-      author?: string;
-      count: number;
-      totalImpact: number;
-    }>();
-
-    leaderboard.slice(0, 25).forEach((entry) => {
-      if (!entry.proposalTitle) return;
-
-      const key = entry.proposalId || entry.proposalTitle;
-      const existing = totals.get(key) || {
-        id: entry.proposalId,
-        title: entry.proposalTitle,
-        url: entry.proposalUrl,
-        author: entry.proposalAuthor,
-        count: 0,
-        totalImpact: 0
-      };
-
-      existing.count += 1;
-      existing.totalImpact += entry.score;
-      totals.set(key, existing);
-    });
-
-    return Array.from(totals.values())
-      .sort((a, b) => b.count - a.count || b.totalImpact - a.totalImpact)
-      .slice(0, 3);
-  }, [leaderboard]);
 
   useEffect(() => {
     if (proposals.length < 2) return undefined;
@@ -116,6 +108,14 @@ const StartScreen: React.FC<StartScreenProps> = ({
       if (flipTimeout) window.clearTimeout(flipTimeout);
     };
   }, [proposals.length]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setShowAllocationAmount((value) => !value);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleSendFeedback = async () => {
     if (!feedback.liked && !feedback.change && !feedback.disliked) return;
@@ -202,11 +202,24 @@ const StartScreen: React.FC<StartScreenProps> = ({
 
             <div className="rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-3 sm:p-4">
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-100/80">Monthly Allocation</div>
-              <div className="mt-2 flex items-end justify-between gap-3">
-                <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{daysUntilAllocation}</div>
-                <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">days left</div>
+              <div className="relative mt-2 min-h-[64px] overflow-hidden">
+                <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? '-translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
+                  <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{monthlyAllocation.daysLeft}</div>
+                  <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
+                    days to<br />{monthlyAllocation.endLabel}
+                  </div>
+                </div>
+                <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+                  <div>
+                    <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{monthlyAllocation.allocationRsc}</div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">RSC</div>
+                  </div>
+                  <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
+                    to monthly<br />winner pick
+                  </div>
+                </div>
               </div>
-              <p className="mt-2 hidden text-xs leading-relaxed text-slate-300 sm:block">Top pilots can nominate a ResearchHub proposal for Scott's funding-credit pick.</p>
+              <p className="mt-2 hidden text-xs leading-relaxed text-slate-300 sm:block">The monthly No. 1 pilot chooses the ResearchHub proposal signal.</p>
             </div>
           </div>
         </div>
@@ -215,10 +228,29 @@ const StartScreen: React.FC<StartScreenProps> = ({
           <section className="self-start rounded-[26px] border border-white/10 bg-slate-950/70 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>
-                <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">Global Leaderboard</h3>
-                <p className="text-[11px] font-semibold text-slate-400">Wallet-linked scores and RSC badges.</p>
+                <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">
+                  {leaderboardView === 'monthly' ? 'Monthly Leaderboard' : 'All-Time Leaderboard'}
+                </h3>
+                <p className="text-[11px] font-semibold text-slate-400">
+                  {leaderboardView === 'monthly' ? 'Top 5 resets each month.' : 'Top 25 archive across every mission.'}
+                </p>
               </div>
-              <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-100">Top 25</span>
+              <div className="flex shrink-0 rounded-full border border-white/10 bg-black/25 p-1">
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardView('monthly')}
+                  className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${leaderboardView === 'monthly' ? 'bg-emerald-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                >
+                  Top 5
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardView('allTime')}
+                  className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${leaderboardView === 'allTime' ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                >
+                  Top 25
+                </button>
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-[20px] border border-white/10 bg-black/35">
@@ -232,11 +264,13 @@ const StartScreen: React.FC<StartScreenProps> = ({
 
                 <div className="space-y-1">
                   {isLoading ? (
-                    <div className="py-8 text-center text-xs font-semibold text-slate-500 animate-pulse">Scanning global archive...</div>
-                  ) : leaderboard.length === 0 ? (
-                    <div className="py-8 text-center text-xs font-semibold text-red-300">No global scores yet. First pilot gets the clean lane.</div>
+                    <div className="py-8 text-center text-xs font-semibold text-slate-500 animate-pulse">Scanning leaderboard archive...</div>
+                  ) : visibleLeaderboard.length === 0 ? (
+                    <div className="py-8 text-center text-xs font-semibold text-red-300">
+                      {leaderboardView === 'monthly' ? 'No monthly scores yet. First pilot claims the signal.' : 'No global scores yet. First pilot gets the clean lane.'}
+                    </div>
                   ) : (
-                    leaderboard.slice(0, 25).map((entry, idx) => {
+                    visibleLeaderboard.map((entry, idx) => {
                       const entryKey = `${entry.name}-${entry.score}-${entry.wave}-${entry.date || idx}`;
                       const hasFundingSignal = Boolean(entry.proposalTitle);
                       const isExpanded = expandedFundingKey === entryKey;
@@ -285,33 +319,31 @@ const StartScreen: React.FC<StartScreenProps> = ({
             <div className="mt-3 rounded-[20px] border border-emerald-300/15 bg-emerald-300/10 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Proposal Signals</h4>
-                  <p className="text-[10px] font-semibold text-slate-400">Top 25 pilots steering Scott's funding-credit pick.</p>
+                  <h4 className="text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Champion Pick</h4>
+                  <p className="text-[10px] font-semibold text-slate-400">Only the monthly No. 1 pilot steers the 500 RSC signal.</p>
                 </div>
-                <span className="rounded-full border border-emerald-200/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-100">Votes</span>
+                <span className="rounded-full border border-emerald-200/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-100">500 RSC</span>
               </div>
 
-              {proposalSignalLeaders.length > 0 ? (
-                <div className="space-y-1">
-                  {proposalSignalLeaders.map((proposal, idx) => (
-                    <button
-                      type="button"
-                      key={`${proposal.id || proposal.title}-${idx}`}
-                      onClick={() => proposal.url && onOpenProposal(proposal.url)}
-                      className="grid w-full grid-cols-[28px_1fr_52px] items-center gap-2 rounded-xl bg-black/25 px-3 py-2 text-left transition hover:bg-black/35"
-                    >
-                      <span className="font-mono text-[10px] font-black text-emerald-200">#{idx + 1}</span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-black text-white">{proposal.title}</span>
-                        <span className="block truncate text-[10px] font-semibold text-slate-400">{proposal.author || 'ResearchHub proposal'}</span>
-                      </span>
-                      <span className="text-right font-mono text-xs font-black text-emerald-100">{proposal.count}</span>
-                    </button>
-                  ))}
-                </div>
+              {monthlyChampionProposal ? (
+                <button
+                  type="button"
+                  onClick={() => monthlyChampionProposal.url && onOpenProposal(monthlyChampionProposal.url)}
+                  className="grid w-full grid-cols-[42px_1fr] items-center gap-3 rounded-xl bg-black/25 px-3 py-3 text-left transition hover:bg-black/35"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-200/40 bg-yellow-200 text-sm font-black text-slate-950">
+                    #1
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-black text-white">{monthlyChampionProposal.title}</span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-400">
+                      Picked by {monthlyChampionProposal.pilot}{monthlyChampionProposal.author ? ` for ${monthlyChampionProposal.author}` : ''}
+                    </span>
+                  </span>
+                </button>
               ) : (
                 <div className="rounded-xl bg-black/20 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
-                  No funding signals yet. New top-25 pilots can pick a live proposal after submitting.
+                  No champion proposal yet. The next monthly No. 1 score gets the pick screen.
                 </div>
               )}
             </div>
@@ -348,10 +380,13 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   </div>
                 ) : null}
 
-                {proposalStatus === 'ready' ? stackedProposals.map(({ proposal, offset }) => (
+                {proposalStatus === 'ready' ? stackedProposals.map(({ proposal, offset }) => {
+                  const isMonthlyPick = isChampionProposal(proposal);
+
+                  return (
                   <article
                     key={proposal.id}
-                    className={`absolute inset-x-0 top-0 will-change-transform rounded-[22px] border border-slate-200 bg-white p-3 text-slate-950 shadow-[0_22px_55px_rgba(0,0,0,0.42)] transition-[transform,opacity,filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${offset > 0 ? 'pointer-events-none' : ''}`}
+                    className={`absolute inset-x-0 top-0 will-change-transform rounded-[22px] border bg-white p-3 text-slate-950 shadow-[0_22px_55px_rgba(0,0,0,0.42)] transition-[transform,opacity,filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isMonthlyPick ? 'border-yellow-300 ring-2 ring-yellow-200/60' : 'border-slate-200'} ${offset > 0 ? 'pointer-events-none' : ''}`}
                     style={{
                       opacity: offset === 0 ? (isProposalFlipping ? 0.92 : 1) : offset === 1 ? 0.74 : 0.42,
                       filter: offset === 0 ? 'none' : `saturate(${1 - offset * 0.12}) blur(${offset * 0.15}px)`,
@@ -363,6 +398,11 @@ const StartScreen: React.FC<StartScreenProps> = ({
                       zIndex: 3 - offset
                     }}
                   >
+                    {isMonthlyPick ? (
+                      <div className="absolute right-3 top-3 z-10 rounded-full border border-yellow-300 bg-yellow-200 px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-950 shadow-[0_10px_22px_rgba(250,204,21,0.3)]">
+                        No. 1 Pick
+                      </div>
+                    ) : null}
                     <div className="flex gap-3">
                       <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-28 sm:w-28">
                         {proposal.imageUrl ? (
@@ -411,7 +451,8 @@ const StartScreen: React.FC<StartScreenProps> = ({
                       </button>
                     </div>
                   </article>
-                )) : null}
+                  );
+                }) : null}
               </div>
             </div>
 

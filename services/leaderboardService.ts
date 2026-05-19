@@ -1,8 +1,9 @@
 import { STORAGE_KEYS } from '../constants';
-import { LeaderboardEntry } from '../types';
+import { LeaderboardData, LeaderboardEntry } from '../types';
 
 const API_URL = (import.meta.env.VITE_LEADERBOARD_API_URL as string | undefined)?.trim() || '/api/leaderboard';
 const MAX_SCORES = 25;
+const MAX_MONTHLY_SCORES = 5;
 const LOCAL_ARCHIVE_LIMIT = 100;
 const SEED_DATE = new Date(0).toISOString();
 
@@ -49,6 +50,20 @@ const sanitizeText = (value: unknown, maxLength: number): string | undefined => 
 const sanitizeUrl = (value: unknown): string | undefined => {
   const url = sanitizeText(value, 500);
   return url && /^https?:\/\//i.test(url) ? url : undefined;
+};
+
+const getCurrentMonthRange = () => {
+  const now = new Date();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+    end: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()
+  };
+};
+
+const isCurrentMonthEntry = (entry: LeaderboardEntry) => {
+  const timestamp = new Date(entry.date || 0).getTime();
+  const { start, end } = getCurrentMonthRange();
+  return Number.isFinite(timestamp) && timestamp >= start && timestamp < end;
 };
 
 const sanitizeEntry = (entry: Partial<LeaderboardEntry> | null | undefined): LeaderboardEntry | null => {
@@ -112,7 +127,15 @@ const mergeScores = (...scoreGroups: LeaderboardEntry[][]): LeaderboardEntry[] =
   return dedupeAndSort(scoreGroups.flat(), LOCAL_ARCHIVE_LIMIT);
 };
 
-const readRemoteScores = async (): Promise<LeaderboardEntry[]> => {
+const toLeaderboardData = (scores: LeaderboardEntry[]): LeaderboardData => {
+  const archive = dedupeAndSort(scores, LOCAL_ARCHIVE_LIMIT);
+  const allTime = dedupeAndSort(archive, MAX_SCORES);
+  const monthlyScores = dedupeAndSort(archive.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+
+  return { scores: allTime, monthlyScores };
+};
+
+const readRemoteLeaderboardData = async (): Promise<LeaderboardData> => {
   const response = await fetch(API_URL, {
     method: 'GET',
     headers: { 'Accept': 'application/json' }
@@ -128,10 +151,15 @@ const readRemoteScores = async (): Promise<LeaderboardEntry[]> => {
   }
 
   const data = await response.json();
-  return Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+  const scores = Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+  const monthlyScores = Array.isArray(data.monthlyScores)
+    ? dedupeAndSort(data.monthlyScores, MAX_MONTHLY_SCORES)
+    : dedupeAndSort(scores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+
+  return { scores, monthlyScores };
 };
 
-const writeRemoteScores = async (entry: LeaderboardEntry | null, scores: LeaderboardEntry[] = []): Promise<LeaderboardEntry[]> => {
+const writeRemoteLeaderboardData = async (entry: LeaderboardEntry | null, scores: LeaderboardEntry[] = []): Promise<LeaderboardData> => {
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -146,37 +174,47 @@ const writeRemoteScores = async (entry: LeaderboardEntry | null, scores: Leaderb
   }
 
   const data = await response.json();
-  return Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+  const nextScores = Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
+  const monthlyScores = Array.isArray(data.monthlyScores)
+    ? dedupeAndSort(data.monthlyScores, MAX_MONTHLY_SCORES)
+    : dedupeAndSort(nextScores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+
+  return { scores: nextScores, monthlyScores };
 };
 
-export const getScores = async (): Promise<LeaderboardEntry[]> => {
+export const getLeaderboardData = async (): Promise<LeaderboardData> => {
   const localArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
   const offlineTop = readStoredScores(STORAGE_KEYS.OFFLINE_SCORES);
 
   try {
-    let remoteScores = await readRemoteScores();
+    let remoteData = await readRemoteLeaderboardData();
 
     if (localArchive.length > 0 || offlineTop.length > 0) {
       try {
-        remoteScores = await writeRemoteScores(null, mergeScores(localArchive, offlineTop).filter((score) => !isDefaultSeedEntry(score)));
+        remoteData = await writeRemoteLeaderboardData(null, mergeScores(localArchive, offlineTop).filter((score) => !isDefaultSeedEntry(score)));
       } catch (syncError) {
         console.error("Failed to sync local leaderboard archive", syncError);
       }
     }
 
-    const mergedScores = mergeScores(remoteScores, localArchive, offlineTop, DEFAULT_SCORES);
-    const topScores = mergedScores.slice(0, MAX_SCORES);
+    const mergedScores = mergeScores(remoteData.scores, remoteData.monthlyScores, localArchive, offlineTop, DEFAULT_SCORES);
+    const leaderboardData = toLeaderboardData(mergedScores);
 
     writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, mergedScores);
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, topScores);
+    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, leaderboardData.scores);
 
-    return topScores;
+    return leaderboardData;
   } catch (error) {
     console.error("Leaderboard error:", error);
     const fallbackScores = dedupeAndSort([...localArchive, ...offlineTop, ...DEFAULT_SCORES], MAX_SCORES);
     writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, fallbackScores);
-    return fallbackScores;
+    return toLeaderboardData([...localArchive, ...offlineTop, ...DEFAULT_SCORES]);
   }
+};
+
+export const getScores = async (): Promise<LeaderboardEntry[]> => {
+  const data = await getLeaderboardData();
+  return data.scores;
 };
 
 export const saveScore = async (
@@ -191,7 +229,7 @@ export const saveScore = async (
     proposalUrl?: string;
     proposalAuthor?: string;
   } = {}
-): Promise<LeaderboardEntry[]> => {
+): Promise<LeaderboardData> => {
   const newEntry: LeaderboardEntry = {
     name: name.trim().substring(0, 15).toUpperCase(),
     score: Math.max(0, Math.floor(score)),
@@ -210,18 +248,18 @@ export const saveScore = async (
   writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, nextLocalArchive.slice(0, LOCAL_ARCHIVE_LIMIT));
 
   try {
-    const remoteScores = await writeRemoteScores(newEntry, nextLocalArchive.filter((score) => !isDefaultSeedEntry(score)));
-    const mergedScores = mergeScores(remoteScores, nextLocalArchive, DEFAULT_SCORES);
-    const topScores = mergedScores.slice(0, MAX_SCORES);
+    const remoteData = await writeRemoteLeaderboardData(newEntry, nextLocalArchive.filter((score) => !isDefaultSeedEntry(score)));
+    const mergedScores = mergeScores(remoteData.scores, remoteData.monthlyScores, nextLocalArchive, DEFAULT_SCORES);
+    const leaderboardData = toLeaderboardData(mergedScores);
 
     writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, mergedScores.slice(0, LOCAL_ARCHIVE_LIMIT));
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, topScores);
+    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, leaderboardData.scores);
 
-    return topScores;
+    return leaderboardData;
   } catch (error) {
     console.error("Save error:", error);
     const fallbackScores = dedupeAndSort([...nextLocalArchive, ...DEFAULT_SCORES], MAX_SCORES);
     writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, fallbackScores);
-    return fallbackScores;
+    return toLeaderboardData([...nextLocalArchive, ...DEFAULT_SCORES]);
   }
 };

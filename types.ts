@@ -59,6 +59,11 @@ export interface LeaderboardEntry {
   proposalAuthor?: string;
 }
 
+export interface LeaderboardData {
+  scores: LeaderboardEntry[];
+  monthlyScores: LeaderboardEntry[];
+}
+
 export interface Stats {
   score: number;
   highScore: number;

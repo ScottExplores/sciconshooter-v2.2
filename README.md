@@ -20,13 +20,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Y8dpXQRPnZfRavbYSvuY9u
 
 ## Global leaderboard
 
-The app submits scores to `/api/leaderboard`. Supabase is the recommended storage path because the game already tracks wallet addresses, RSC support badges, monthly events, and proposal funding signals. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the table already exists, rerun the same SQL to add the proposal-signal columns safely:
+The app submits scores to `/api/leaderboard`. Supabase is the recommended storage path because the game already tracks wallet addresses, RSC support badges, monthly events, and the monthly No. 1 proposal funding signal. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the table already exists, rerun the same SQL to add the proposal-signal columns safely:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_LEADERBOARD_TABLE` (optional, defaults to `scicon_leaderboard`)
 
 Keep the service role key server-side only. Do not expose it with a `VITE_` prefix.
+
+The home screen shows the current-month top 5 by default and lets players switch to the all-time top 25. Only a score that takes the monthly No. 1 spot can choose the ResearchHub proposal for the 500 RSC monthly allocation signal.
 
 KV/Upstash Redis still works for a simpler top-25-only setup. Add these environment variables instead:
 
