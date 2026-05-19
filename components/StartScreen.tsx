@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LeaderboardEntry } from '../types';
 import {
   formatUsd,
   ResearchHubProposal
 } from '../services/researchHubProposals';
+import { DONATION_CONFIG } from '../constants';
 
 type ProposalFeedStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 interface StartScreenProps {
   onStart: () => void;
-  onAbout: () => void;
   allTimeLeaderboard: LeaderboardEntry[];
   monthlyLeaderboard: LeaderboardEntry[];
   isLoading: boolean;
@@ -19,6 +19,7 @@ interface StartScreenProps {
   onOpenFund: () => void;
   onOpenProposal: (url: string) => void;
   onOpenXProfile: () => void;
+  onOpenTreasurySend: () => void;
 }
 
 type LeaderboardView = 'monthly' | 'allTime';
@@ -46,7 +47,6 @@ const getInitials = (name: string) => (
 
 const StartScreen: React.FC<StartScreenProps> = ({
   onStart,
-  onAbout,
   allTimeLeaderboard,
   monthlyLeaderboard,
   isLoading,
@@ -55,9 +55,12 @@ const StartScreen: React.FC<StartScreenProps> = ({
   onOpenReferral,
   onOpenFund,
   onOpenProposal,
-  onOpenXProfile
+  onOpenXProfile,
+  onOpenTreasurySend
 }) => {
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showTreasury, setShowTreasury] = useState(false);
+  const [treasuryCopyStatus, setTreasuryCopyStatus] = useState<'idle' | 'copied' | 'selected' | 'error'>('idle');
   const [feedback, setFeedback] = useState({
     liked: '',
     change: '',
@@ -70,6 +73,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
   const [expandedFundingKey, setExpandedFundingKey] = useState<string | null>(null);
   const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>('monthly');
   const [showAllocationAmount, setShowAllocationAmount] = useState(false);
+  const treasuryAddressRef = useRef<HTMLInputElement | null>(null);
   const monthlyAllocation = useMemo(getMonthlyAllocationMeta, []);
   const visibleLeaderboard = leaderboardView === 'monthly'
     ? monthlyLeaderboard.slice(0, 5)
@@ -170,6 +174,75 @@ const StartScreen: React.FC<StartScreenProps> = ({
     }
   };
 
+  const selectTreasuryAddress = () => {
+    const input = treasuryAddressRef.current;
+    if (!input) return false;
+
+    input.focus();
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    return true;
+  };
+
+  const copyTextWithFallback = async (text: string): Promise<'copied' | 'selected' | 'error'> => {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return 'copied';
+      } catch {
+        // Some mobile/in-app browsers block this API even on secure origins.
+      }
+    }
+
+    const selectedVisibleAddress = selectTreasuryAddress();
+    if (selectedVisibleAddress) {
+      try {
+        if (document.execCommand('copy')) {
+          return 'copied';
+        }
+      } catch {
+        // Keep the selected address as a manual fallback.
+      }
+
+      return 'selected';
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    document.body.appendChild(textarea);
+
+    try {
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, text.length);
+      return document.execCommand('copy') ? 'copied' : 'error';
+    } catch {
+      return 'error';
+    } finally {
+      document.body.removeChild(textarea);
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
+  const handleCopyTreasuryAddress = async () => {
+    const copyResult = await copyTextWithFallback(DONATION_CONFIG.RECIPIENT_ADDRESS);
+
+    if (copyResult !== 'error') {
+      setTreasuryCopyStatus(copyResult);
+      window.setTimeout(() => setTreasuryCopyStatus('idle'), copyResult === 'copied' ? 1800 : 2600);
+      return;
+    }
+
+    setTreasuryCopyStatus('error');
+    window.setTimeout(() => setTreasuryCopyStatus('idle'), 2400);
+  };
+
   return (
     <div className="absolute inset-0 z-10 overflow-hidden bg-[#050816] text-white">
       <div className="absolute inset-0 opacity-75" style={{ backgroundImage: 'url(/game-art/backgrounds/menu-hero.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
@@ -180,20 +253,11 @@ const StartScreen: React.FC<StartScreenProps> = ({
         <div className="flex min-h-[260px] shrink-0 flex-col gap-3 overflow-visible rounded-[26px] border border-white/10 bg-slate-950/72 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:min-h-[250px] sm:p-4 lg:min-h-[180px]">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="arcade-font text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">SCICON SHOOTER</div>
+              <div className="scicon-logo-lockup" aria-label="SCICON SHOOTER">
+                <span className="scicon-logo-word" data-text="SCICON">SCICON</span>
+                <span className="scicon-logo-word scicon-logo-word--sub" data-text="SHOOTER">SHOOTER</span>
+              </div>
               <p className="mt-1 text-xs font-semibold text-slate-300 sm:text-sm">Upgrade with RSC. Fight bottlenecks. Steer funding credits.</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:justify-end">
-              <button onClick={onAbout} className="rh-nav-button">
-                <span>Briefing</span>
-              </button>
-              <button onClick={onOpenReferral} className="rh-nav-button">
-                <span>Join Hub</span>
-              </button>
-              <button onClick={onOpenFund} className="rh-nav-button">
-                <span>Fund</span>
-              </button>
             </div>
           </div>
 
@@ -220,13 +284,11 @@ const StartScreen: React.FC<StartScreenProps> = ({
                     days to<br />{monthlyAllocation.endLabel}
                   </div>
                 </div>
-                <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+                <div className={`absolute inset-0 flex items-center justify-center text-center transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
                   <div>
-                    <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{monthlyAllocation.allocationRsc}</div>
-                    <div className="text-[8px] font-black uppercase leading-tight tracking-[0.1em] text-emerald-200">RSC funding credits</div>
-                  </div>
-                  <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
-                    to monthly<br />winner pick
+                    <div className="arcade-font text-3xl font-black leading-none text-white sm:text-4xl">{monthlyAllocation.allocationRsc}</div>
+                    <div className="mt-1 text-[13px] font-black uppercase leading-none tracking-[0.24em] text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.45)]">RSC</div>
+                    <div className="mt-1 text-[7px] font-black uppercase leading-tight tracking-[0.18em] text-slate-300">funding credits</div>
                   </div>
                 </div>
               </div>
@@ -428,9 +490,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">Live Proposal Deck</h3>
                   <p className="text-[11px] font-semibold text-slate-400">Real open ResearchHub proposals pulled from the funding feed.</p>
                 </div>
-                <button onClick={onOpenFund} className="hidden rounded-full bg-white px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-blue-100 sm:inline-flex">
-                  Open Fund
-                </button>
               </div>
 
               <div className="relative mt-3 min-h-[286px] sm:min-h-[300px]">
@@ -528,18 +587,30 @@ const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-2 rounded-[22px] border border-white/10 bg-slate-950/68 p-3 backdrop-blur-xl">
+              <button onClick={onOpenReferral} className="rh-nav-button">
+                <span>Join Research Hub</span>
+              </button>
+              <button onClick={onOpenFund} className="rh-nav-button">
+                <span>Fund Proposals</span>
+              </button>
+            </div>
+
             <footer className="rounded-[22px] border border-white/10 bg-slate-950/68 p-3 text-xs leading-relaxed text-slate-300 backdrop-blur-xl">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   <span className="font-black text-white">About ResearchHub:</span> an open science platform for funding, publishing, peer review, and RSC-powered community rewards.
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button onClick={onOpenXProfile} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-xs font-black text-white transition hover:border-blue-300/50 hover:bg-blue-500/15">
+                <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
+                  <button onClick={onOpenXProfile} className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-2 text-[10px] font-black text-white transition hover:border-blue-300/50 hover:bg-blue-500/15 sm:flex-none sm:gap-2 sm:px-4 sm:text-xs">
                     <span className="font-mono">X</span>
-                    <span>@ScottExplores29</span>
+                    <span className="truncate">@ScottExplores29</span>
                   </button>
-                  <button onClick={() => setShowFeedback(true)} className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-blue-100">
-                    Send feedback
+                  <button onClick={() => setShowTreasury(true)} className="inline-flex min-w-0 flex-1 items-center justify-center rounded-full border border-emerald-200/20 bg-emerald-300/15 px-2.5 py-2 text-[10px] font-black text-emerald-100 transition hover:border-emerald-200/45 hover:bg-emerald-300/25 sm:flex-none sm:px-4 sm:text-xs">
+                    Treasury
+                  </button>
+                  <button onClick={() => setShowFeedback(true)} className="inline-flex min-w-0 flex-1 items-center justify-center rounded-full border border-white/10 bg-white px-2.5 py-2 text-[10px] font-black text-slate-950 transition hover:bg-blue-100 sm:flex-none sm:px-4 sm:text-xs">
+                    Feedback
                   </button>
                 </div>
               </div>
@@ -583,6 +654,47 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   </button>
                 ) : null}
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showTreasury ? (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-[28px] border border-emerald-200/20 bg-slate-950 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.52)]">
+            <div className="space-y-5 text-center">
+              <div>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-300/15 text-xl font-black text-emerald-100">$</div>
+                <h2 className="arcade-font text-xl font-bold tracking-widest text-white">FUND THE TREASURY</h2>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-300">
+                  The treasury supports SciCon Shooter prizes and ResearchHub funding-credit events. RSC sent here can be used to acquire ResearchHub funding credits, while USDC or other Base tokens can help refill future reward pools.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/35 p-4 text-left">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Treasury wallet</div>
+                <input
+                  ref={treasuryAddressRef}
+                  readOnly
+                  value={DONATION_CONFIG.RECIPIENT_ADDRESS}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] p-3 font-mono text-xs font-bold text-white outline-none selection:bg-emerald-300 selection:text-slate-950"
+                  aria-label="Treasury wallet address"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleCopyTreasuryAddress} className="rh-nav-button">
+                  <span>{treasuryCopyStatus === 'copied' ? 'Copied' : treasuryCopyStatus === 'selected' ? 'Address Selected' : treasuryCopyStatus === 'error' ? 'Copy Failed' : 'Copy Address'}</span>
+                </button>
+                <button onClick={onOpenTreasurySend} className="rh-nav-button">
+                  <span>Open Wallet Send</span>
+                </button>
+              </div>
+
+              <button onClick={() => setShowTreasury(false)} className="text-xs font-bold tracking-widest text-gray-500 underline hover:text-white">
+                CLOSE
+              </button>
             </div>
           </div>
         </div>

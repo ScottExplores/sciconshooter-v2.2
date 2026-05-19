@@ -107,6 +107,27 @@ const getUserFacingMessage = (error: any, fallback: string) => {
   return message;
 };
 
+const getProjectedScoreQualification = (
+  allTimeEntries: LeaderboardEntry[],
+  monthlyEntries: LeaderboardEntry[],
+  score: number
+) => {
+  const allTimeSorted = [...allTimeEntries].sort((a, b) => b.score - a.score);
+  const monthlySorted = [...monthlyEntries].sort((a, b) => b.score - a.score);
+  const allTimeRank = allTimeSorted.filter((entry) => entry.score > score).length + 1;
+  const monthlyRank = monthlySorted.filter((entry) => entry.score > score).length + 1;
+  const allTimeFloor = allTimeSorted.length < 25 ? 0 : allTimeSorted[Math.min(allTimeSorted.length - 1, 24)].score;
+  const monthlyFloor = monthlySorted.length < 5 ? 0 : monthlySorted[Math.min(monthlySorted.length - 1, 4)].score;
+
+  return {
+    allTimeRank,
+    monthlyRank,
+    qualifiesAllTimeTop25: score > 0 && (allTimeSorted.length < 25 || score >= allTimeFloor),
+    qualifiesMonthlyTop5: score > 0 && (monthlySorted.length < 5 || score >= monthlyFloor),
+    isMonthlyChampion: score > 0 && (monthlySorted.length === 0 || score >= monthlySorted[0].score)
+  };
+};
+
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [gameId, setGameId] = useState<number>(0);
@@ -629,19 +650,13 @@ const App: React.FC = () => {
         setStats(s => ({ ...s, highScore: s.score }));
       }
 
-      const allTimeSorted = [...leaderboard].sort((a, b) => b.score - a.score);
-      const monthlySorted = [...monthlyLeaderboard].sort((a, b) => b.score - a.score);
-      const lowestAllTimeScore = allTimeSorted.length < 25 ? 0 : allTimeSorted[Math.min(allTimeSorted.length - 1, 24)].score;
-      const lowestMonthlyScore = monthlySorted.length < 5 ? 0 : monthlySorted[Math.min(monthlySorted.length - 1, 4)].score;
-      const isAllTimeTop25 = allTimeSorted.length < 25 || stats.score >= lowestAllTimeScore;
-      const isMonthlyTop5 = monthlySorted.length < 5 || stats.score >= lowestMonthlyScore;
-      const isMonthlyChampion = monthlySorted.length === 0 || stats.score >= monthlySorted[0].score;
+      const scoreQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, stats.score);
 
-      if (stats.score > 0 && (isMonthlyTop5 || isAllTimeTop25)) {
+      if (scoreQualification.qualifiesMonthlyTop5 || scoreQualification.qualifiesAllTimeTop25) {
         if (!playerNameInput && address) {
           setPlayerNameInput(`0X${address.slice(2, 6)}`.toUpperCase());
         }
-        if (isMonthlyChampion && !selectedProposalId && fundingProposals.length > 0) {
+        if (scoreQualification.isMonthlyChampion && !selectedProposalId && fundingProposals.length > 0) {
           setSelectedProposalId(fundingProposals[0].id);
         }
         setShowNameInput(true);
@@ -663,7 +678,8 @@ const App: React.FC = () => {
     const score = stats.score;
     const wave = stats.wave;
     const submittedAt = new Date().toISOString();
-    const isMonthlyChampionSubmission = monthlyLeaderboard.length === 0 || score >= monthlyLeaderboard[0].score;
+    const submitQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, score);
+    const isMonthlyChampionSubmission = submitQualification.isMonthlyChampion;
     const selectedProposal = isMonthlyChampionSubmission
       ? fundingProposals.find((proposal) => proposal.id === selectedProposalId) || fundingProposals[0]
       : undefined;
@@ -730,10 +746,23 @@ const App: React.FC = () => {
     await miniAppService.openUrl(DONATION_CONFIG.RSC_SWAP_URL);
   };
 
+  const openTreasurySend = async () => {
+    await miniAppService.openUrl(`ethereum:${DONATION_CONFIG.RECIPIENT_ADDRESS}@${DONATION_CONFIG.BASE_CHAIN_ID}`);
+  };
+
   const pubStatus = getPubStatus(stats.score);
+  const scoreQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, stats.score);
   const canSelectFundingProposal = showNameInput
-    && stats.score > 0
-    && (monthlyLeaderboard.length === 0 || stats.score >= monthlyLeaderboard[0].score);
+    && scoreQualification.isMonthlyChampion;
+  const scoreQualificationMessage = scoreQualification.isMonthlyChampion
+    ? 'Monthly champion run. Pick the proposal that should steer the 500 RSC funding-credit signal.'
+    : scoreQualification.qualifiesMonthlyTop5 && scoreQualification.qualifiesAllTimeTop25
+      ? 'This score qualifies for monthly Top 5 and all-time Top 25. It is saved once and appears on both boards while it ranks on both.'
+      : scoreQualification.qualifiesMonthlyTop5
+        ? `Monthly Top 5 run at projected rank #${scoreQualification.monthlyRank}. Push for #1 to unlock the champion proposal pick.`
+        : scoreQualification.qualifiesAllTimeTop25
+          ? `All-time Top 25 run at projected rank #${scoreQualification.allTimeRank}. Try again this month for #1 so you can steer funding credits.`
+          : '';
 
   return (
     <div className="relative h-full w-full select-none bg-[#0b1020]">
@@ -776,7 +805,6 @@ const App: React.FC = () => {
       {gameState === GameState.MENU && (
         <StartScreen
           onStart={startGame}
-          onAbout={() => setGameState(GameState.ABOUT)}
           allTimeLeaderboard={leaderboard}
           monthlyLeaderboard={monthlyLeaderboard}
           isLoading={loadingLeaderboard}
@@ -786,6 +814,7 @@ const App: React.FC = () => {
           onOpenFund={openResearchHubFund}
           onOpenProposal={openResearchHubProposal}
           onOpenXProfile={() => miniAppService.openUrl(DONATION_CONFIG.X_PROFILE_URL)}
+          onOpenTreasurySend={openTreasurySend}
         />
       )}
 
@@ -849,6 +878,28 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                   <h2 className="arcade-font animate-pulse text-2xl font-black tracking-widest text-yellow-400">NEW HIGH SCORE!</h2>
                   <div className="text-4xl font-bold text-white">{stats.score}</div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {scoreQualification.qualifiesMonthlyTop5 ? (
+                      <span className="rounded-full border border-emerald-200/25 bg-emerald-300/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">
+                        Monthly #{scoreQualification.monthlyRank}
+                      </span>
+                    ) : null}
+                    {scoreQualification.qualifiesAllTimeTop25 ? (
+                      <span className="rounded-full border border-blue-200/25 bg-blue-300/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-100">
+                        All-Time #{scoreQualification.allTimeRank}
+                      </span>
+                    ) : null}
+                    {scoreQualification.isMonthlyChampion ? (
+                      <span className="rounded-full border border-yellow-200/30 bg-yellow-200/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-yellow-100">
+                        Champion Pick
+                      </span>
+                    ) : null}
+                  </div>
+                  {scoreQualificationMessage ? (
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold leading-relaxed text-slate-300">
+                      {scoreQualificationMessage}
+                    </p>
+                  ) : null}
                   <p className="font-mono text-sm text-gray-300">ENTER YOUR NAME:</p>
 
                   <form onSubmit={submitScore} className="space-y-4">
@@ -868,7 +919,7 @@ const App: React.FC = () => {
                         <div className="mb-2">
                           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Monthly No. 1 Funding Pick</div>
                           <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
-                            You are taking the monthly lead. Choose the live ResearchHub proposal for the 500 RSC funding-credit signal.
+                            You are taking the monthly lead. Scroll the live ResearchHub proposal list and choose one for the 500 RSC funding-credit signal.
                           </p>
                         </div>
 
@@ -885,7 +936,12 @@ const App: React.FC = () => {
                         ) : null}
 
                         {fundingProposals.length > 0 ? (
-                          <div className="custom-scrollbar max-h-64 space-y-3 overflow-y-auto pr-1">
+                          <>
+                          <div className="mb-2 flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
+                            <span>{fundingProposals.length} live proposals</span>
+                            <span className="text-emerald-200">Scroll to choose</span>
+                          </div>
+                          <div className="custom-scrollbar max-h-[46vh] space-y-3 overflow-y-auto overscroll-contain pr-1">
                             {fundingProposals.map((proposal) => {
                               const isSelected = selectedProposalId === proposal.id;
 
@@ -921,11 +977,14 @@ const App: React.FC = () => {
                               );
                             })}
                           </div>
+                          </>
                         ) : null}
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center text-[11px] font-semibold leading-relaxed text-slate-400">
-                        Proposal selection unlocks only for the monthly No. 1 pilot. This score still counts for monthly top 5 and all-time top 25.
+                        {scoreQualification.qualifiesAllTimeTop25 && !scoreQualification.qualifiesMonthlyTop5
+                          ? 'This score lands on the all-time board. Try again before month-end for monthly No. 1 and the champion proposal pick.'
+                          : 'Proposal selection unlocks only for the monthly No. 1 pilot. This score still submits to each leaderboard it qualifies for.'}
                       </div>
                     )}
 

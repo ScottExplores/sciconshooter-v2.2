@@ -1,7 +1,9 @@
 const https = require('https');
 
 const RESEARCHHUB_FUNDING_FEED =
-  'https://backend.prod.researchhub.com/api/funding_feed/?fundraise_status=OPEN&ordering=best&page_size=5&content_type=PREREGISTRATION';
+  'https://backend.prod.researchhub.com/api/funding_feed/?fundraise_status=OPEN&ordering=best&page_size=20&content_type=PREREGISTRATION';
+const MAX_PROPOSAL_PAGES = 5;
+const MAX_PROPOSALS = 100;
 
 const sendJson = (res, status, payload) => {
   res.statusCode = status;
@@ -51,9 +53,9 @@ const requestJsonWithRelaxedCert = (url) => new Promise((resolve, reject) => {
   request.end();
 });
 
-const fetchResearchHubFeed = async () => {
+const fetchResearchHubFeedPage = async (url) => {
   try {
-    const response = await fetch(RESEARCHHUB_FUNDING_FEED, {
+    const response = await fetch(url, {
       headers: {
         Accept: 'application/json',
         'User-Agent': 'SciconShooter/1.0 (+https://sciconshooter.xyz)'
@@ -71,8 +73,33 @@ const fetchResearchHubFeed = async () => {
       throw error;
     }
 
-    return requestJsonWithRelaxedCert(RESEARCHHUB_FUNDING_FEED);
+    return requestJsonWithRelaxedCert(url);
   }
+};
+
+const fetchResearchHubFeed = async () => {
+  let nextUrl = RESEARCHHUB_FUNDING_FEED;
+  let firstPayload = null;
+  const results = [];
+
+  for (let page = 0; nextUrl && page < MAX_PROPOSAL_PAGES && results.length < MAX_PROPOSALS; page += 1) {
+    const payload = await fetchResearchHubFeedPage(nextUrl);
+    if (!firstPayload) {
+      firstPayload = payload;
+    }
+
+    if (Array.isArray(payload?.results)) {
+      results.push(...payload.results.slice(0, MAX_PROPOSALS - results.length));
+    }
+
+    nextUrl = typeof payload?.next === 'string' ? payload.next : null;
+  }
+
+  return {
+    ...(firstPayload || {}),
+    next: nextUrl,
+    results
+  };
 };
 
 module.exports = async (req, res) => {
