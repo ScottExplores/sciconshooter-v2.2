@@ -1,10 +1,8 @@
-import { STORAGE_KEYS } from '../constants';
 import { LeaderboardData, LeaderboardEntry } from '../types';
 
 const API_URL = (import.meta.env.VITE_LEADERBOARD_API_URL as string | undefined)?.trim() || '/api/leaderboard';
 const MAX_SCORES = 25;
 const MAX_MONTHLY_SCORES = 5;
-const LOCAL_ARCHIVE_LIMIT = 100;
 const SEED_DATE = new Date(0).toISOString();
 
 const DEFAULT_SCORES: LeaderboardEntry[] = [
@@ -34,12 +32,6 @@ const DEFAULT_SCORES: LeaderboardEntry[] = [
   { name: "GUEST 7", score: 35, date: SEED_DATE, wave: 1 },
   { name: "GUEST 8", score: 30, date: SEED_DATE, wave: 1 }
 ];
-
-const DEFAULT_SCORE_KEYS = new Set(DEFAULT_SCORES.map((entry) => `${entry.name}|${entry.score}|${entry.wave}`));
-
-const isDefaultSeedEntry = (entry: LeaderboardEntry) => (
-  DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
-);
 
 const sanitizeText = (value: unknown, maxLength: number): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -105,32 +97,9 @@ const dedupeAndSort = (scores: LeaderboardEntry[], limit: number): LeaderboardEn
   return normalized.slice(0, limit);
 };
 
-const readStoredScores = (key: string): LeaderboardEntry[] => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? dedupeAndSort(parsed, LOCAL_ARCHIVE_LIMIT).filter((score) => !isDefaultSeedEntry(score))
-      : [];
-  } catch (error) {
-    console.error(`Failed to parse ${key}`, error);
-    return [];
-  }
-};
-
-const writeStoredScores = (key: string, scores: LeaderboardEntry[]) => {
-  localStorage.setItem(key, JSON.stringify(scores));
-};
-
-const mergeScores = (...scoreGroups: LeaderboardEntry[][]): LeaderboardEntry[] => {
-  return dedupeAndSort(scoreGroups.flat(), LOCAL_ARCHIVE_LIMIT);
-};
-
 const toLeaderboardData = (scores: LeaderboardEntry[]): LeaderboardData => {
-  const archive = dedupeAndSort(scores, LOCAL_ARCHIVE_LIMIT);
-  const allTime = dedupeAndSort(archive, MAX_SCORES);
-  const monthlyScores = dedupeAndSort(archive.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+  const allTime = dedupeAndSort(scores, MAX_SCORES);
+  const monthlyScores = dedupeAndSort(scores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
 
   return { scores: allTime, monthlyScores };
 };
@@ -159,14 +128,14 @@ const readRemoteLeaderboardData = async (): Promise<LeaderboardData> => {
   return { scores, monthlyScores };
 };
 
-const writeRemoteLeaderboardData = async (entry: LeaderboardEntry | null, scores: LeaderboardEntry[] = []): Promise<LeaderboardData> => {
+const writeRemoteLeaderboardData = async (entry: LeaderboardEntry): Promise<LeaderboardData> => {
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ entry, scores })
+    body: JSON.stringify({ entry })
   });
 
   if (!response.ok) {
@@ -183,32 +152,11 @@ const writeRemoteLeaderboardData = async (entry: LeaderboardEntry | null, scores
 };
 
 export const getLeaderboardData = async (): Promise<LeaderboardData> => {
-  const localArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
-  const offlineTop = readStoredScores(STORAGE_KEYS.OFFLINE_SCORES);
-
   try {
-    let remoteData = await readRemoteLeaderboardData();
-
-    if (localArchive.length > 0 || offlineTop.length > 0) {
-      try {
-        remoteData = await writeRemoteLeaderboardData(null, mergeScores(localArchive, offlineTop).filter((score) => !isDefaultSeedEntry(score)));
-      } catch (syncError) {
-        console.error("Failed to sync local leaderboard archive", syncError);
-      }
-    }
-
-    const mergedScores = mergeScores(remoteData.scores, remoteData.monthlyScores, localArchive, offlineTop, DEFAULT_SCORES);
-    const leaderboardData = toLeaderboardData(mergedScores);
-
-    writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, mergedScores);
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, leaderboardData.scores);
-
-    return leaderboardData;
+    return await readRemoteLeaderboardData();
   } catch (error) {
     console.error("Leaderboard error:", error);
-    const fallbackScores = dedupeAndSort([...localArchive, ...offlineTop, ...DEFAULT_SCORES], MAX_SCORES);
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, fallbackScores);
-    return toLeaderboardData([...localArchive, ...offlineTop, ...DEFAULT_SCORES]);
+    return toLeaderboardData(DEFAULT_SCORES);
   }
 };
 
@@ -243,23 +191,10 @@ export const saveScore = async (
     proposalAuthor: sanitizeText(options.proposalAuthor, 100)
   };
 
-  const currentLocalArchive = readStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE);
-  const nextLocalArchive = mergeScores(currentLocalArchive, [newEntry], DEFAULT_SCORES);
-  writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, nextLocalArchive.slice(0, LOCAL_ARCHIVE_LIMIT));
-
   try {
-    const remoteData = await writeRemoteLeaderboardData(newEntry, nextLocalArchive.filter((score) => !isDefaultSeedEntry(score)));
-    const mergedScores = mergeScores(remoteData.scores, remoteData.monthlyScores, nextLocalArchive, DEFAULT_SCORES);
-    const leaderboardData = toLeaderboardData(mergedScores);
-
-    writeStoredScores(STORAGE_KEYS.LOCAL_LEADERBOARD_ARCHIVE, mergedScores.slice(0, LOCAL_ARCHIVE_LIMIT));
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, leaderboardData.scores);
-
-    return leaderboardData;
+    return await writeRemoteLeaderboardData(newEntry);
   } catch (error) {
     console.error("Save error:", error);
-    const fallbackScores = dedupeAndSort([...nextLocalArchive, ...DEFAULT_SCORES], MAX_SCORES);
-    writeStoredScores(STORAGE_KEYS.OFFLINE_SCORES, fallbackScores);
-    return toLeaderboardData([...nextLocalArchive, ...DEFAULT_SCORES]);
+    return toLeaderboardData([newEntry, ...DEFAULT_SCORES]);
   }
 };

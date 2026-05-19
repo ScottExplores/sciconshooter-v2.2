@@ -82,6 +82,17 @@ const StartScreen: React.FC<StartScreenProps> = ({
     author: monthlyChampion.proposalAuthor,
     pilot: monthlyChampion.name
   } : null;
+  const monthlyChampionLiveProposal = monthlyChampionProposal
+    ? proposals.find((proposal) => proposal.id === monthlyChampionProposal.id || proposal.title === monthlyChampionProposal.title)
+    : undefined;
+  const championCard = monthlyChampionProposal ? {
+    title: monthlyChampionLiveProposal?.title || monthlyChampionProposal.title,
+    url: monthlyChampionLiveProposal?.url || monthlyChampionProposal.url,
+    author: monthlyChampionLiveProposal?.author || monthlyChampionProposal.author || 'ResearchHub proposal',
+    organization: monthlyChampionLiveProposal?.organization,
+    imageUrl: monthlyChampionLiveProposal?.imageUrl,
+    status: monthlyChampionLiveProposal?.status
+  } : null;
   const isChampionProposal = (proposal: ResearchHubProposal) => Boolean(monthlyChampionProposal)
     && (proposal.id === monthlyChampionProposal?.id || proposal.title === monthlyChampionProposal?.title);
   const stackedProposals = useMemo(() => (
@@ -212,7 +223,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
                 <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
                   <div>
                     <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{monthlyAllocation.allocationRsc}</div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">RSC</div>
+                    <div className="text-[8px] font-black uppercase leading-tight tracking-[0.1em] text-emerald-200">RSC funding credits</div>
                   </div>
                   <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
                     to monthly<br />winner pick
@@ -238,17 +249,21 @@ const StartScreen: React.FC<StartScreenProps> = ({
               <div className="flex shrink-0 rounded-full border border-white/10 bg-black/25 p-1">
                 <button
                   type="button"
+                  aria-label="Monthly Top 5"
                   onClick={() => setLeaderboardView('monthly')}
-                  className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${leaderboardView === 'monthly' ? 'bg-emerald-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  className={`flex min-w-[64px] flex-col items-center rounded-full px-3 py-1 text-center font-black uppercase transition ${leaderboardView === 'monthly' ? 'bg-emerald-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
-                  Top 5
+                  <span className="text-[7px] tracking-[0.16em] opacity-80">Monthly</span>
+                  <span className="text-[9px] tracking-[0.12em]">Top 5</span>
                 </button>
                 <button
                   type="button"
+                  aria-label="All Time Top 25"
                   onClick={() => setLeaderboardView('allTime')}
-                  className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition ${leaderboardView === 'allTime' ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  className={`flex min-w-[64px] flex-col items-center rounded-full px-3 py-1 text-center font-black uppercase transition ${leaderboardView === 'allTime' ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
-                  Top 25
+                  <span className="text-[7px] tracking-[0.16em] opacity-80">All Time</span>
+                  <span className="text-[9px] tracking-[0.12em]">Top 25</span>
                 </button>
               </div>
             </div>
@@ -325,22 +340,79 @@ const StartScreen: React.FC<StartScreenProps> = ({
                 <span className="rounded-full border border-emerald-200/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-100">500 RSC</span>
               </div>
 
-              {monthlyChampionProposal ? (
-                <button
-                  type="button"
-                  onClick={() => monthlyChampionProposal.url && onOpenProposal(monthlyChampionProposal.url)}
-                  className="grid w-full grid-cols-[42px_1fr] items-center gap-3 rounded-xl bg-black/25 px-3 py-3 text-left transition hover:bg-black/35"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-200/40 bg-yellow-200 text-sm font-black text-slate-950">
-                    #1
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-black text-white">{monthlyChampionProposal.title}</span>
-                    <span className="block truncate text-[10px] font-semibold text-slate-400">
-                      Picked by {monthlyChampionProposal.pilot}{monthlyChampionProposal.author ? ` for ${monthlyChampionProposal.author}` : ''}
-                    </span>
-                  </span>
-                </button>
+              {championCard ? (
+                <article className="rounded-[18px] border border-yellow-200/60 bg-white p-2 text-slate-950 shadow-[0_18px_42px_rgba(0,0,0,0.32)]">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-yellow-200 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-950">No. 1 Pick</span>
+                    <span className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">By {monthlyChampionProposal?.pilot}</span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                      {championCard.imageUrl ? (
+                        <img src={championCard.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-slate-950 text-lg font-black text-white">
+                          {getInitials(championCard.author)}
+                        </div>
+                      )}
+                      {championCard.status ? (
+                        <div className="absolute left-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[8px] font-black uppercase tracking-wide text-slate-900">
+                          {championCard.status}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h5 className="line-clamp-3 text-sm font-black leading-snug text-slate-950">{championCard.title}</h5>
+                      <div className="mt-2 min-w-0">
+                        <div className="truncate text-xs font-black text-slate-950">{championCard.author}</div>
+                        <div className="truncate text-[11px] font-semibold text-slate-500">{championCard.organization || 'ResearchHub proposal'}</div>
+                      </div>
+
+                      {monthlyChampionLiveProposal ? (
+                        <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-50 p-2">
+                          <div>
+                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Requested</div>
+                            <div className="font-mono text-xs font-black text-blue-600">{formatUsd(monthlyChampionLiveProposal.requestedUsd)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Raised</div>
+                            <div className="font-mono text-xs font-black text-slate-950">{formatUsd(monthlyChampionLiveProposal.raisedUsd)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Review</div>
+                            <div className="font-mono text-xs font-black text-slate-950">{monthlyChampionLiveProposal.peerReview?.toFixed(1) ?? 'N/A'}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-500">
+                          This winner pick is saved from the champion score.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-slate-600">
+                    <div className="min-w-0 text-[10px] font-bold">
+                      {monthlyChampionLiveProposal ? (
+                        <span className="truncate">
+                          Backers {monthlyChampionLiveProposal.backers} / Votes {monthlyChampionLiveProposal.votes}
+                        </span>
+                      ) : (
+                        <span className="truncate">Champion funding signal</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!championCard.url}
+                      onClick={() => championCard.url && onOpenProposal(championCard.url)}
+                      className="shrink-0 rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      View
+                    </button>
+                  </div>
+                </article>
               ) : (
                 <div className="rounded-xl bg-black/20 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
                   No champion proposal yet. The next monthly No. 1 score gets the pick screen.

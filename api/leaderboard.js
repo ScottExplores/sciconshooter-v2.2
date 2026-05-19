@@ -1,7 +1,6 @@
 const MAX_SCORES = 25;
 const MAX_MONTHLY_SCORES = 5;
 const SYNC_SCORE_LIMIT = 100;
-const LEADERBOARD_KEY = process.env.LEADERBOARD_KV_KEY || 'scicon-shooter:leaderboard';
 const SUPABASE_TABLE = process.env.SUPABASE_LEADERBOARD_TABLE || 'scicon_leaderboard';
 
 const DEFAULT_SCORES = [
@@ -40,20 +39,10 @@ const isDefaultSeedEntry = (entry) => (
   Boolean(entry) && DEFAULT_SCORE_KEYS.has(`${entry.name}|${entry.score}|${entry.wave}`)
 );
 
-const getRedisConfig = () => ({
-  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-});
-
 const getSupabaseConfig = () => ({
   url: process.env.SUPABASE_URL,
   key: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 });
-
-const hasRedisConfig = () => {
-  const { url, token } = getRedisConfig();
-  return Boolean(url && token);
-};
 
 const hasSupabaseConfig = () => {
   const { url, key } = getSupabaseConfig();
@@ -146,45 +135,6 @@ const toLeaderboardPayload = (scores) => {
     scores: dedupeAndSort(archive, MAX_SCORES),
     monthlyScores: dedupeAndSort(archive.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES)
   };
-};
-
-const redisCommand = async (command) => {
-  const { url, token } = getRedisConfig();
-  if (!url || !token) {
-    throw new Error('Missing KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(command)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Redis command failed with ${response.status}`);
-  }
-
-  return response.json();
-};
-
-const readRedisScores = async () => {
-  const data = await redisCommand(['GET', LEADERBOARD_KEY]);
-  if (!data.result) {
-    return dedupeAndSort(DEFAULT_SCORES, SYNC_SCORE_LIMIT);
-  }
-
-  const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
-  const scores = Array.isArray(parsed.scores) ? parsed.scores : parsed;
-  return dedupeAndSort(Array.isArray(scores) ? scores : DEFAULT_SCORES, SYNC_SCORE_LIMIT);
-};
-
-const writeRedisScores = async (scores) => {
-  const archive = dedupeAndSort(scores, SYNC_SCORE_LIMIT);
-  await redisCommand(['SET', LEADERBOARD_KEY, JSON.stringify({ scores: archive })]);
-  return archive;
 };
 
 const supabaseUrl = (path) => {
@@ -319,11 +269,7 @@ const readScores = async () => {
     return readSupabaseScores();
   }
 
-  if (hasRedisConfig()) {
-    return readRedisScores();
-  }
-
-  throw new Error('Missing leaderboard storage config. Add Supabase env vars or KV/Upstash env vars.');
+  throw new Error('Missing Supabase leaderboard storage config. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
 };
 
 const writeScores = async (scores) => {
@@ -331,11 +277,7 @@ const writeScores = async (scores) => {
     return writeSupabaseScores(scores);
   }
 
-  if (hasRedisConfig()) {
-    return writeRedisScores(scores);
-  }
-
-  throw new Error('Missing leaderboard storage config. Add Supabase env vars or KV/Upstash env vars.');
+  throw new Error('Missing Supabase leaderboard storage config. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
 };
 
 const parseBody = (body) => {
@@ -364,15 +306,13 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const body = parseBody(req.body);
-      const currentScores = await readScores();
       const entry = sanitizeEntry(body.entry);
-      const submittedScores = Array.isArray(body.scores) ? body.scores : [];
 
-      if (!entry && submittedScores.length === 0) {
+      if (!entry) {
         return sendJson(res, 400, { error: 'Missing leaderboard entry' });
       }
 
-      const scores = await writeScores([...currentScores, ...submittedScores, entry].filter(Boolean));
+      const scores = await writeScores([entry]);
       return sendJson(res, 200, toLeaderboardPayload(scores));
     }
 

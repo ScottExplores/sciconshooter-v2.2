@@ -84,8 +84,6 @@ export const DONATION_CONFIG = {
 export const STORAGE_KEYS = {
   PLAYER_STATS: "rh_player_stats",
   HIGH_SCORE: "rh_highscore",
-  OFFLINE_SCORES: "offline_scores",
-  LOCAL_LEADERBOARD_ARCHIVE: "scicon_local_leaderboard_archive",
   WALLET_ADDRESS: "scicon_wallet_address",
   WALLET_PROFILES: "scicon_wallet_profiles",
   DONATED_WALLETS: "scicon_donated_wallets",
