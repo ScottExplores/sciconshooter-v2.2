@@ -20,7 +20,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Y8dpXQRPnZfRavbYSvuY9u
 
 ## Supabase leaderboard
 
-The app submits scores to `/api/leaderboard`. Supabase is the single source of truth for global scores, monthly scores, wallet-linked RSC badges, and the monthly No. 1 proposal funding signal. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the tables already exist, rerun the same SQL safely to add any missing columns or indexes:
+The app submits scores to `/api/leaderboard`. Supabase is the single source of truth for global scores, monthly scores, wallet-linked RSC badges, and the monthly No. 1 proposal allocation pick. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the tables already exist, rerun the same SQL safely to add any missing columns or indexes:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -30,7 +30,7 @@ The app submits scores to `/api/leaderboard`. Supabase is the single source of t
 
 Keep the service role key server-side only. Do not expose it with a `VITE_` prefix.
 
-The home screen shows the current-month top 5 by default and lets players switch to the all-time top 25. Monthly reset is automatic: all score rows stay in `scicon_leaderboard`, and the current monthly board is just the rows whose `date` is inside the current month. Only a score that takes the monthly No. 1 spot can choose the ResearchHub proposal for the 500 RSC monthly allocation signal.
+The home screen shows the current-month top 5 by default and lets players switch to the all-time top 25. Monthly reset is automatic: all score rows stay in `scicon_leaderboard`, and the current monthly board is just the rows whose `date` is inside the current month. Only a score that takes the monthly No. 1 spot can choose the ResearchHub proposal for the 500 RSC monthly allocation pick.
 
 Monthly winner archiving is handled by Vercel Cron. At 00:10 UTC on the first day of each month, `/api/archive-monthly-winner` snapshots the previous month's No. 1 score and proposal pick into `scicon_monthly_winners`. You can view archived winners at `/api/monthly-winners`. To archive a month manually, send an authorized `POST` to `/api/monthly-winners` with `{ "monthKey": "YYYY-MM" }` and `Authorization: Bearer <CRON_SECRET>`.
 

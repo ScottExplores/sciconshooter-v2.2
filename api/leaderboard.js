@@ -90,7 +90,7 @@ const dedupeAndSort = (scores, limit = MAX_SCORES) => {
 
   normalized.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+    return new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
   });
 
   return normalized.slice(0, limit);
@@ -155,7 +155,7 @@ const fromSupabaseRow = (row) => sanitizeEntry({
 });
 
 const requestSupabaseScores = async (selectColumns, query = '') => {
-  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=${selectColumns}&order=score.desc,date.desc${query}`), {
+  const response = await fetch(supabaseUrl(`${SUPABASE_TABLE}?select=${selectColumns}&order=score.desc,date.asc${query}`), {
     headers: supabaseHeaders()
   });
 

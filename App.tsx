@@ -112,19 +112,22 @@ const getProjectedScoreQualification = (
   monthlyEntries: LeaderboardEntry[],
   score: number
 ) => {
-  const allTimeSorted = [...allTimeEntries].sort((a, b) => b.score - a.score);
-  const monthlySorted = [...monthlyEntries].sort((a, b) => b.score - a.score);
-  const allTimeRank = allTimeSorted.filter((entry) => entry.score > score).length + 1;
-  const monthlyRank = monthlySorted.filter((entry) => entry.score > score).length + 1;
-  const allTimeFloor = allTimeSorted.length < 25 ? 0 : allTimeSorted[Math.min(allTimeSorted.length - 1, 24)].score;
-  const monthlyFloor = monthlySorted.length < 5 ? 0 : monthlySorted[Math.min(monthlySorted.length - 1, 4)].score;
+  const sortByScoreThenFirstClaim = (entries: LeaderboardEntry[]) => [...entries].sort((a, b) => (
+    b.score !== a.score
+      ? b.score - a.score
+      : new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+  ));
+  const allTimeSorted = sortByScoreThenFirstClaim(allTimeEntries);
+  const monthlySorted = sortByScoreThenFirstClaim(monthlyEntries);
+  const allTimeRank = allTimeSorted.filter((entry) => entry.score >= score).length + 1;
+  const monthlyRank = monthlySorted.filter((entry) => entry.score >= score).length + 1;
 
   return {
     allTimeRank,
     monthlyRank,
-    qualifiesAllTimeTop25: score > 0 && (allTimeSorted.length < 25 || score >= allTimeFloor),
-    qualifiesMonthlyTop5: score > 0 && (monthlySorted.length < 5 || score >= monthlyFloor),
-    isMonthlyChampion: score > 0 && (monthlySorted.length === 0 || score >= monthlySorted[0].score)
+    qualifiesAllTimeTop25: score > 0 && allTimeRank <= 25,
+    qualifiesMonthlyTop5: score > 0 && monthlyRank <= 5,
+    isMonthlyChampion: score > 0 && monthlyRank === 1
   };
 };
 
@@ -161,6 +164,8 @@ const App: React.FC = () => {
   const lastStoryWaveRef = useRef(0);
   const introStoryTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const gameStateRef = useRef<GameState>(GameState.MENU);
+  const submittingScoreRef = useRef(false);
+  const submittedScoreKeysRef = useRef<Set<string>>(new Set());
 
   const { address, connector, isConnected, isConnecting } = useAccount();
   const chainId = useChainId();
@@ -390,6 +395,7 @@ const App: React.FC = () => {
     setPlayerNameInput('');
     setSelectedProposalId('');
     setIsSubmittingScore(false);
+    submittingScoreRef.current = false;
     setGameId(prev => prev + 1);
     setGameState(GameState.TUTORIAL);
   };
@@ -645,6 +651,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === GameState.GAMEOVER) {
+      const scoreKey = `${gameId}:${stats.score}:${stats.wave}`;
+      if (submittedScoreKeysRef.current.has(scoreKey)) {
+        return;
+      }
+
       if (stats.score > stats.highScore) {
         localStorage.setItem(STORAGE_KEYS.HIGH_SCORE, stats.score.toString());
         setStats(s => ({ ...s, highScore: s.score }));
@@ -662,7 +673,7 @@ const App: React.FC = () => {
         setShowNameInput(true);
       }
     }
-  }, [address, fundingProposals, gameState, monthlyLeaderboard, playerNameInput, selectedProposalId, stats.score, stats.highScore, leaderboard]);
+  }, [address, fundingProposals, gameId, gameState, monthlyLeaderboard, playerNameInput, selectedProposalId, stats.score, stats.wave, stats.highScore, leaderboard]);
 
   const submitScore = async (e?: React.FormEvent) => {
     if (e) {
@@ -670,20 +681,23 @@ const App: React.FC = () => {
       e.stopPropagation();
     }
 
-    if (!playerNameInput.trim() || isSubmittingScore) return;
+    if (!playerNameInput.trim() || submittingScoreRef.current) return;
 
+    submittingScoreRef.current = true;
     setIsSubmittingScore(true);
 
     const name = playerNameInput.trim().substring(0, 15).toUpperCase();
     const score = stats.score;
     const wave = stats.wave;
+    const scoreKey = `${gameId}:${score}:${wave}`;
+    submittedScoreKeysRef.current.add(scoreKey);
     const submittedAt = new Date().toISOString();
     const submitQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, score);
     const isMonthlyChampionSubmission = submitQualification.isMonthlyChampion;
     const selectedProposal = isMonthlyChampionSubmission
       ? fundingProposals.find((proposal) => proposal.id === selectedProposalId) || fundingProposals[0]
       : undefined;
-    const proposalSignal = selectedProposal ? {
+    const proposalPickData = selectedProposal ? {
       proposalId: selectedProposal.id,
       proposalTitle: selectedProposal.title,
       proposalUrl: selectedProposal.url,
@@ -697,10 +711,15 @@ const App: React.FC = () => {
       date: submittedAt,
       walletAddress: address || undefined,
       donated: wallet.hasDonated,
-      ...proposalSignal
+      ...proposalPickData
     };
-    const optimisticList = [...leaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 25);
-    const optimisticMonthlyList = [...monthlyLeaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 5);
+    const scoreSorter = (a: LeaderboardEntry, b: LeaderboardEntry) => (
+      b.score !== a.score
+        ? b.score - a.score
+        : new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+    );
+    const optimisticList = [...leaderboard, newEntry].sort(scoreSorter).slice(0, 25);
+    const optimisticMonthlyList = [...monthlyLeaderboard, newEntry].sort(scoreSorter).slice(0, 5);
     setLeaderboard(optimisticList);
     setMonthlyLeaderboard(optimisticMonthlyList);
 
@@ -708,7 +727,7 @@ const App: React.FC = () => {
       const updatedData = await saveScore(name, score, wave, {
         walletAddress: address,
         donated: wallet.hasDonated,
-        ...proposalSignal
+        ...proposalPickData
       });
       if (updatedData.scores.length > 0) {
         setLeaderboard(updatedData.scores);
@@ -716,11 +735,12 @@ const App: React.FC = () => {
       setMonthlyLeaderboard(updatedData.monthlyScores);
     } catch (error) {
       console.error("Score submission error", error);
+    } finally {
+      submittingScoreRef.current = false;
+      setIsSubmittingScore(false);
+      setShowNameInput(false);
+      setGameState(GameState.MENU);
     }
-
-    setIsSubmittingScore(false);
-    setShowNameInput(false);
-    setGameState(GameState.MENU);
   };
 
   const getPubStatus = (score: number) => {
@@ -755,7 +775,7 @@ const App: React.FC = () => {
   const canSelectFundingProposal = showNameInput
     && scoreQualification.isMonthlyChampion;
   const scoreQualificationMessage = scoreQualification.isMonthlyChampion
-    ? 'Monthly champion run. Pick the proposal that should steer the 500 RSC funding-credit signal.'
+    ? 'Monthly champion run. Pick the proposal that should receive the 500 RSC funding-credit allocation.'
     : scoreQualification.qualifiesMonthlyTop5 && scoreQualification.qualifiesAllTimeTop25
       ? 'This score qualifies for monthly Top 5 and all-time Top 25. It is saved once and appears on both boards while it ranks on both.'
       : scoreQualification.qualifiesMonthlyTop5
@@ -891,7 +911,7 @@ const App: React.FC = () => {
                     ) : null}
                     {scoreQualification.isMonthlyChampion ? (
                       <span className="rounded-full border border-yellow-200/30 bg-yellow-200/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-yellow-100">
-                        Champion Pick
+                        RSC Pick
                       </span>
                     ) : null}
                   </div>
@@ -919,7 +939,7 @@ const App: React.FC = () => {
                         <div className="mb-2">
                           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Monthly No. 1 Funding Pick</div>
                           <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
-                            You are taking the monthly lead. Scroll the live ResearchHub proposal list and choose one for the 500 RSC funding-credit signal.
+                            You are taking the monthly lead. Scroll the live ResearchHub proposal list and choose one for the 500 RSC funding-credit allocation.
                           </p>
                         </div>
 
@@ -1085,7 +1105,7 @@ const App: React.FC = () => {
                 <div>
                   <strong className="text-indigo-400">FUNDING EVENT:</strong>
                   <p className="mt-1">
-                    The monthly leaderboard now acts as the funding signal: the No. 1 pilot chooses a ResearchHub proposal, and Scott can direct funding credits toward that winner's pick.
+                    The monthly leaderboard now drives the funding allocation: the No. 1 pilot chooses a ResearchHub proposal, and Scott can direct funding credits toward that winner's pick.
                   </p>
                 </div>
                 <p className="mt-4 border-t border-gray-700 pt-2 text-xs italic text-gray-500">

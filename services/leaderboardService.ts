@@ -62,7 +62,7 @@ const dedupeAndSort = (scores: LeaderboardEntry[], limit: number): LeaderboardEn
 
   normalized.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+    return new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
   });
 
   return normalized.slice(0, limit);

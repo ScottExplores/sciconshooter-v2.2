@@ -292,7 +292,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   </div>
                 </div>
               </div>
-              <p className="mt-2 hidden text-xs leading-relaxed text-slate-300 sm:block">The monthly No. 1 pilot chooses the ResearchHub proposal signal.</p>
+              <p className="mt-2 hidden text-xs leading-relaxed text-slate-300 sm:block">The monthly No. 1 pilot chooses the ResearchHub proposal pick.</p>
             </div>
           </div>
         </div>
@@ -332,7 +332,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
 
             <div className="overflow-hidden rounded-[20px] border border-white/10 bg-black/35">
               <div className="custom-scrollbar max-h-[250px] overflow-y-auto p-2 sm:max-h-[270px]">
-                <div className="sticky top-0 z-10 mb-1 grid grid-cols-[42px_1fr_44px_72px] gap-2 rounded-xl bg-slate-950/92 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500 backdrop-blur">
+                <div className="sticky top-0 z-10 mb-1 grid grid-cols-[34px_minmax(0,1fr)_36px_64px] gap-1.5 rounded-xl bg-slate-950/92 px-2 py-2 font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500 backdrop-blur sm:grid-cols-[42px_minmax(0,1fr)_44px_72px] sm:gap-2 sm:px-3 sm:text-[9px]">
                   <span>Rank</span>
                   <span>Pilot</span>
                   <span className="text-center">Wave</span>
@@ -344,46 +344,84 @@ const StartScreen: React.FC<StartScreenProps> = ({
                     <div className="py-8 text-center text-xs font-semibold text-slate-500 animate-pulse">Scanning leaderboard archive...</div>
                   ) : visibleLeaderboard.length === 0 ? (
                     <div className="py-8 text-center text-xs font-semibold text-red-300">
-                      {leaderboardView === 'monthly' ? 'No monthly scores yet. First pilot claims the signal.' : 'No global scores yet. First pilot gets the clean lane.'}
+                      {leaderboardView === 'monthly' ? 'No monthly scores yet. First pilot claims the pick.' : 'No global scores yet. First pilot gets the clean lane.'}
                     </div>
                   ) : (
                     visibleLeaderboard.map((entry, idx) => {
                       const entryKey = `${entry.name}-${entry.score}-${entry.wave}-${entry.date || idx}`;
-                      const hasFundingSignal = Boolean(entry.proposalTitle);
+                      const isCurrentMonthlyChampion = leaderboardView === 'monthly' && idx === 0;
+                      const hasRscPick = isCurrentMonthlyChampion && Boolean(championCard);
                       const isExpanded = expandedFundingKey === entryKey;
-                      const fundingTitle = entry.proposalTitle || 'No proposal selected';
-                      const title = hasFundingSignal ? `${entry.name} is steering credits toward: ${fundingTitle}` : undefined;
+                      const fundingTitle = championCard?.title || entry.proposalTitle || 'No proposal selected';
+                      const title = hasRscPick ? `${entry.name} picked: ${fundingTitle}` : undefined;
 
                       return (
                         <div
                           key={entryKey}
                           title={title}
-                          onClick={() => hasFundingSignal && setExpandedFundingKey(isExpanded ? null : entryKey)}
-                          className={`grid grid-cols-[42px_1fr_44px_72px] items-center gap-2 rounded-xl px-3 py-2 font-mono text-[11px] font-bold transition ${hasFundingSignal ? 'cursor-pointer' : ''} ${idx === 0 ? 'bg-yellow-200 text-slate-950 shadow-[0_0_0_1px_rgba(250,204,21,.45)]' : 'bg-white/[0.045] text-slate-200 hover:bg-white/[0.075]'}`}
+                          onClick={() => hasRscPick && setExpandedFundingKey(isExpanded ? null : entryKey)}
+                          className={`grid grid-cols-[34px_minmax(0,1fr)_36px_64px] items-center gap-1.5 rounded-xl px-2 py-2 font-mono text-[10px] font-bold transition sm:grid-cols-[42px_minmax(0,1fr)_44px_72px] sm:gap-2 sm:px-3 sm:text-[11px] ${hasRscPick ? 'cursor-pointer' : ''} ${idx === 0 ? 'bg-yellow-200 text-slate-950 shadow-[0_0_0_1px_rgba(250,204,21,.45)]' : 'bg-white/[0.045] text-slate-200 hover:bg-white/[0.075]'}`}
                         >
                           <span className={idx === 0 ? 'text-slate-950' : 'text-slate-500'}>#{idx + 1}</span>
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="truncate">{entry.name}</span>
                             {entry.donated ? <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-white">RSC</span> : null}
-                            {hasFundingSignal ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] uppercase tracking-wide ${idx === 0 ? 'bg-slate-950/10 text-slate-900' : 'bg-emerald-400/15 text-emerald-200'}`}>Signal</span> : null}
-                          </span>
-                          <span className="text-center text-blue-200">{entry.wave || 1}</span>
-                          <span className="text-right">{entry.score.toLocaleString()}</span>
-
-                          {hasFundingSignal && isExpanded ? (
-                            <div className={`col-span-4 mt-1 rounded-xl border px-3 py-2 text-left text-[10px] leading-snug tracking-normal ${idx === 0 ? 'border-slate-950/15 bg-slate-950/10 text-slate-900' : 'border-emerald-300/15 bg-emerald-300/10 text-emerald-100'}`}>
-                              <div className="uppercase tracking-[0.14em] opacity-70">Funding signal</div>
+                            {hasRscPick ? (
                               <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  if (entry.proposalUrl) onOpenProposal(entry.proposalUrl);
+                                  setExpandedFundingKey(isExpanded ? null : entryKey);
                                 }}
-                                className="mt-1 line-clamp-2 text-left font-sans text-xs font-black underline-offset-2 hover:underline"
+                                className="shrink-0 rounded-full bg-slate-950/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-slate-900 transition hover:bg-slate-950/20"
                               >
-                                {fundingTitle}
+                                RSC Pick
                               </button>
-                            </div>
+                            ) : null}
+                          </span>
+                          <span className="text-center text-blue-200">{entry.wave || 1}</span>
+                          <span className="text-right">{entry.score.toLocaleString()}</span>
+
+                          {hasRscPick && isExpanded && championCard ? (
+                            <article className="col-span-4 mt-1 rounded-2xl border border-slate-950/15 bg-white p-2 text-left tracking-normal text-slate-950 shadow-[0_14px_30px_rgba(0,0,0,0.16)]">
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <span className="rounded-full bg-yellow-200 px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em]">No. 1 RSC Pick</span>
+                                <span className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">500 RSC allocation</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                  {championCard.imageUrl ? (
+                                    <img src={championCard.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-slate-950 text-sm font-black text-white">
+                                      {getInitials(championCard.author)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h5 className="line-clamp-2 font-sans text-xs font-black leading-snug">{fundingTitle}</h5>
+                                  <div className="mt-1 truncate font-sans text-[10px] font-semibold text-slate-500">{championCard.author}</div>
+                                  {monthlyChampionLiveProposal ? (
+                                    <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-50 p-2 font-sans text-[8px] font-bold uppercase tracking-wide text-slate-500">
+                                      <span>Ask <strong className="block font-mono text-[10px] text-blue-600">{formatUsd(monthlyChampionLiveProposal.requestedUsd)}</strong></span>
+                                      <span>Raised <strong className="block font-mono text-[10px] text-slate-950">{formatUsd(monthlyChampionLiveProposal.raisedUsd)}</strong></span>
+                                      <span>Review <strong className="block font-mono text-[10px] text-slate-950">{monthlyChampionLiveProposal.peerReview?.toFixed(1) ?? 'N/A'}</strong></span>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!championCard.url}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (championCard.url) onOpenProposal(championCard.url);
+                                }}
+                                className="mt-2 w-full rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-black text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-45"
+                              >
+                                View Proposal
+                              </button>
+                            </article>
                           ) : null}
                         </div>
                       );
@@ -393,94 +431,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </div>
 
-            <div className="mt-3 rounded-[20px] border border-emerald-300/15 bg-emerald-300/10 p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Champion Pick</h4>
-                  <p className="text-[10px] font-semibold text-slate-400">Only the monthly No. 1 pilot steers the 500 RSC signal.</p>
-                </div>
-                <span className="rounded-full border border-emerald-200/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-100">500 RSC</span>
-              </div>
-
-              {championCard ? (
-                <article className="rounded-[18px] border border-yellow-200/60 bg-white p-2 text-slate-950 shadow-[0_18px_42px_rgba(0,0,0,0.32)]">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-yellow-200 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-950">No. 1 Pick</span>
-                    <span className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">By {monthlyChampionProposal?.pilot}</span>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                      {championCard.imageUrl ? (
-                        <img src={championCard.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-slate-950 text-lg font-black text-white">
-                          {getInitials(championCard.author)}
-                        </div>
-                      )}
-                      {championCard.status ? (
-                        <div className="absolute left-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[8px] font-black uppercase tracking-wide text-slate-900">
-                          {championCard.status}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <h5 className="line-clamp-3 text-sm font-black leading-snug text-slate-950">{championCard.title}</h5>
-                      <div className="mt-2 min-w-0">
-                        <div className="truncate text-xs font-black text-slate-950">{championCard.author}</div>
-                        <div className="truncate text-[11px] font-semibold text-slate-500">{championCard.organization || 'ResearchHub proposal'}</div>
-                      </div>
-
-                      {monthlyChampionLiveProposal ? (
-                        <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-50 p-2">
-                          <div>
-                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Requested</div>
-                            <div className="font-mono text-xs font-black text-blue-600">{formatUsd(monthlyChampionLiveProposal.requestedUsd)}</div>
-                          </div>
-                          <div>
-                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Raised</div>
-                            <div className="font-mono text-xs font-black text-slate-950">{formatUsd(monthlyChampionLiveProposal.raisedUsd)}</div>
-                          </div>
-                          <div>
-                            <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Review</div>
-                            <div className="font-mono text-xs font-black text-slate-950">{monthlyChampionLiveProposal.peerReview?.toFixed(1) ?? 'N/A'}</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="mt-2 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-500">
-                          This winner pick is saved from the champion score.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-slate-600">
-                    <div className="min-w-0 text-[10px] font-bold">
-                      {monthlyChampionLiveProposal ? (
-                        <span className="truncate">
-                          Backers {monthlyChampionLiveProposal.backers} / Votes {monthlyChampionLiveProposal.votes}
-                        </span>
-                      ) : (
-                        <span className="truncate">Champion funding signal</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!championCard.url}
-                      onClick={() => championCard.url && onOpenProposal(championCard.url)}
-                      className="shrink-0 rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      View
-                    </button>
-                  </div>
-                </article>
-              ) : (
-                <div className="rounded-xl bg-black/20 px-3 py-3 text-center text-[11px] font-semibold text-slate-400">
-                  No champion proposal yet. The next monthly No. 1 score gets the pick screen.
-                </div>
-              )}
-            </div>
           </section>
 
           <section className="grid gap-2 lg:min-h-0 lg:grid-rows-[1fr_auto]">
