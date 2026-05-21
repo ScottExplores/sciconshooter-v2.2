@@ -651,7 +651,10 @@ export class GameEngine {
           if (e.life <= 0) e.markedForDeletion = true;
           if (this.bossRef) {
               const anchorX = e.beamAnchorOffsetX ?? (this.bossRef.width / 2 - e.width / 2);
-              e.x = Math.max(0, Math.min(this.width - e.width, this.bossRef.x + anchorX));
+              const waveOneDrift = this.stats.wave === 1
+                ? Math.sin((this.frameCount + (e.variant * 37)) * 0.075) * 16
+                : 0;
+              e.x = Math.max(0, Math.min(this.width - e.width, this.bossRef.x + anchorX + waveOneDrift));
               e.y = this.bossRef.y + this.bossRef.height - 20;
           } else {
               e.markedForDeletion = true;
@@ -1114,6 +1117,7 @@ export class GameEngine {
     beam.maxLife = beam.life;
     beam.color = phase >= 3 ? '#ff7a18' : '#ff0000';
     beam.beamAnchorOffsetX = boss.width / 2 - beamWidth / 2;
+    beam.variant = pulseIndex;
     this.entities.push(beam);
 
     audioService.playSound(pulseIndex === 0 ? 'boss_roar' : 'electricity');
