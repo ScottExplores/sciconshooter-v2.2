@@ -131,6 +131,45 @@ const getProjectedScoreQualification = (
   };
 };
 
+const buildHighScoreShareUrl = ({
+  score,
+  wave,
+  monthlyRank,
+  allTimeRank,
+  isMonthlyChampion,
+  selectedProposal
+}: {
+  score: number;
+  wave: number;
+  monthlyRank?: number;
+  allTimeRank?: number;
+  isMonthlyChampion: boolean;
+  selectedProposal?: ResearchHubProposal;
+}) => {
+  const compactProposalTitle = selectedProposal?.title && selectedProposal.title.length > 86
+    ? `${selectedProposal.title.slice(0, 83)}...`
+    : selectedProposal?.title;
+  const rankParts = [
+    monthlyRank ? `Monthly #${monthlyRank}` : '',
+    allTimeRank ? `All-Time #${allTimeRank}` : ''
+  ].filter(Boolean);
+  const scoreLine = `I scored ${score.toLocaleString()} in SciCon Shooter${rankParts.length ? ` (${rankParts.join(' / ')})` : ''}.`;
+  const missionLine = isMonthlyChampion && compactProposalTitle
+    ? `I picked "${compactProposalTitle}" for the 500 RSC funding-credit allocation.`
+    : 'Trying to climb the leaderboard and win monthly RSC funding credits for science.';
+  const playLine = `Play here: ${DONATION_CONFIG.GAME_URL}`;
+  const shareUrl = isMonthlyChampion && selectedProposal?.url
+    ? selectedProposal.url
+    : '';
+  const params = new URLSearchParams({ text: `${scoreLine}\n${missionLine}\nWave ${wave}. ${playLine}` });
+
+  if (shareUrl) {
+    params.set('url', shareUrl);
+  }
+
+  return `https://x.com/intent/tweet?${params.toString()}`;
+};
+
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [gameId, setGameId] = useState<number>(0);
@@ -143,6 +182,7 @@ const App: React.FC = () => {
   const [showNameInput, setShowNameInput] = useState<boolean>(false);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState<boolean>(false);
   const [isSubmittingScore, setIsSubmittingScore] = useState<boolean>(false);
+  const [scoreSubmitError, setScoreSubmitError] = useState<string>('');
   const [showLabGlow, setShowLabGlow] = useState<boolean>(true);
   const [miniApp, setMiniApp] = useState<MiniAppState>(defaultMiniAppState);
   const [walletError, setWalletError] = useState<string>('');
@@ -670,27 +710,23 @@ const App: React.FC = () => {
         if (scoreQualification.isMonthlyChampion && !selectedProposalId && fundingProposals.length > 0) {
           setSelectedProposalId(fundingProposals[0].id);
         }
+        setScoreSubmitError('');
         setShowNameInput(true);
       }
     }
   }, [address, fundingProposals, gameId, gameState, monthlyLeaderboard, playerNameInput, selectedProposalId, stats.score, stats.wave, stats.highScore, leaderboard]);
 
-  const submitScore = async (e?: React.FormEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    if (!playerNameInput.trim() || submittingScoreRef.current) return;
+  const persistHighScore = async () => {
+    if (!playerNameInput.trim() || submittingScoreRef.current) return false;
 
     submittingScoreRef.current = true;
     setIsSubmittingScore(true);
+    setScoreSubmitError('');
 
     const name = playerNameInput.trim().substring(0, 15).toUpperCase();
     const score = stats.score;
     const wave = stats.wave;
     const scoreKey = `${gameId}:${score}:${wave}`;
-    submittedScoreKeysRef.current.add(scoreKey);
     const submittedAt = new Date().toISOString();
     const submitQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, score);
     const isMonthlyChampionSubmission = submitQualification.isMonthlyChampion;
@@ -718,29 +754,54 @@ const App: React.FC = () => {
         ? b.score - a.score
         : new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
     );
+    const previousLeaderboard = leaderboard;
+    const previousMonthlyLeaderboard = monthlyLeaderboard;
     const optimisticList = [...leaderboard, newEntry].sort(scoreSorter).slice(0, 25);
     const optimisticMonthlyList = [...monthlyLeaderboard, newEntry].sort(scoreSorter).slice(0, 5);
     setLeaderboard(optimisticList);
     setMonthlyLeaderboard(optimisticMonthlyList);
 
+    let confirmedSave = false;
     try {
       const updatedData = await saveScore(name, score, wave, {
         walletAddress: address,
         donated: wallet.hasDonated,
         ...proposalPickData
       });
+      if (updatedData.remoteSaved === false) {
+        throw new Error('Global leaderboard save did not confirm');
+      }
       if (updatedData.scores.length > 0) {
         setLeaderboard(updatedData.scores);
       }
       setMonthlyLeaderboard(updatedData.monthlyScores);
+      submittedScoreKeysRef.current.add(scoreKey);
+      confirmedSave = true;
+      return true;
     } catch (error) {
       console.error("Score submission error", error);
+      submittedScoreKeysRef.current.delete(scoreKey);
+      setLeaderboard(previousLeaderboard);
+      setMonthlyLeaderboard(previousMonthlyLeaderboard);
+      setScoreSubmitError('Global save did not confirm. Please submit again before sharing.');
+      return false;
     } finally {
       submittingScoreRef.current = false;
       setIsSubmittingScore(false);
-      setShowNameInput(false);
-      setGameState(GameState.MENU);
+      if (confirmedSave) {
+        setShowNameInput(false);
+        setGameState(GameState.MENU);
+      }
     }
+  };
+
+  const submitScore = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    await persistHighScore();
   };
 
   const getPubStatus = (score: number) => {
@@ -772,6 +833,24 @@ const App: React.FC = () => {
 
   const pubStatus = getPubStatus(stats.score);
   const scoreQualification = getProjectedScoreQualification(leaderboard, monthlyLeaderboard, stats.score);
+  const selectedShareProposal = fundingProposals.find((proposal) => proposal.id === selectedProposalId);
+  const highScoreShareUrl = buildHighScoreShareUrl({
+    score: stats.score,
+    wave: stats.wave,
+    monthlyRank: scoreQualification.qualifiesMonthlyTop5 ? scoreQualification.monthlyRank : undefined,
+    allTimeRank: scoreQualification.qualifiesAllTimeTop25 ? scoreQualification.allTimeRank : undefined,
+    isMonthlyChampion: scoreQualification.isMonthlyChampion,
+    selectedProposal: selectedShareProposal
+  });
+  const shareHighScore = async () => {
+    if (!playerNameInput.trim() || submittingScoreRef.current) return;
+
+    const shareUrl = highScoreShareUrl;
+    const saved = await persistHighScore();
+    if (saved) {
+      await miniAppService.openUrl(shareUrl);
+    }
+  };
   const canSelectFundingProposal = showNameInput
     && scoreQualification.isMonthlyChampion;
   const scoreQualificationMessage = scoreQualification.isMonthlyChampion
@@ -783,6 +862,9 @@ const App: React.FC = () => {
         : scoreQualification.qualifiesAllTimeTop25
           ? `All-time Top 25 run at projected rank #${scoreQualification.allTimeRank}. Try again this month for #1 so you can steer funding credits.`
           : '';
+  const sharePrompt = scoreQualification.isMonthlyChampion && selectedShareProposal
+    ? 'Share your No. 1 run and proposal pick.'
+    : 'Share your score and invite pilots to chase the funding-credit board.';
 
   return (
     <div className="relative h-full w-full select-none bg-[#0b1020]">
@@ -1008,6 +1090,23 @@ const App: React.FC = () => {
                       </div>
                     )}
 
+                    {scoreSubmitError ? (
+                      <p className="rounded-2xl border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-[11px] font-semibold leading-relaxed text-red-100">
+                        {scoreSubmitError}
+                      </p>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={shareHighScore}
+                      disabled={!playerNameInput || isSubmittingScore || (scoreQualification.isMonthlyChampion && fundingProposals.length > 0 && !selectedShareProposal)}
+                      className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-100 transition hover:border-sky-300/50 hover:bg-sky-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Save & Share on X
+                    </button>
+                    <p className="-mt-2 text-center text-[10px] font-semibold leading-relaxed text-slate-500">
+                      {sharePrompt} Your score saves before X opens.
+                    </p>
                     <button
                       type="submit"
                       disabled={!playerNameInput || isSubmittingScore}

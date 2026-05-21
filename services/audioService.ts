@@ -57,7 +57,7 @@ class AudioService {
   }
 
   // Procedural Sound Generation
-  public playSound(type: 'shoot' | 'explode' | 'coin' | 'powerup' | 'hit' | 'boss_roar' | 'electricity') {
+  public playSound(type: 'shoot' | 'explode' | 'coin' | 'powerup' | 'hit' | 'boss_roar' | 'electricity' | 'siren') {
     if (!this.ctx || this.muted) return;
 
     const t = this.ctx.currentTime;
@@ -81,6 +81,17 @@ class AudioService {
         
         osc.start(t);
         osc.stop(t + 0.5);
+        break;
+
+      case 'siren':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(520, t);
+        osc.frequency.linearRampToValueAtTime(880, t + 0.18);
+        osc.frequency.linearRampToValueAtTime(520, t + 0.36);
+        gain.gain.setValueAtTime(0.18, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.44);
+        osc.start(t);
+        osc.stop(t + 0.44);
         break;
 
       case 'shoot':

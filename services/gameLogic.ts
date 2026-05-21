@@ -33,6 +33,7 @@ export class Entity {
   isCharging: boolean = false;
   isBeam: boolean = false; 
   beamAnchorOffsetX: number | null = null;
+  beamLaneSign: number = 0;
 
   // Missile Props
   isMissile: boolean = false;
@@ -465,13 +466,13 @@ export class GameEngine {
 
   startBossWarning(type: BossWarningType) {
     this.inBossWarningSequence = true;
-    this.bossWarningDuration = type === 'gatekeeper' ? 300 : 40;
+    this.bossWarningDuration = type === 'gatekeeper' ? 300 : 90;
     this.bossWarningFrame = this.bossWarningDuration;
     this.pendingBossType = type;
     if (type === 'gatekeeper') {
       this.clearThreatsForMainBoss();
     }
-    audioService.playSound('boss_roar');
+    audioService.playSound(this.isSubBossWarning(type) ? 'siren' : 'boss_roar');
   }
 
   clearThreatsForMainBoss() {
@@ -485,6 +486,10 @@ export class GameEngine {
 
   getSecondSubBossType(): BossWarningType {
     return this.wave % 2 === 0 ? 'asteroid' : 'wall';
+  }
+
+  isSubBossWarning(type: BossWarningType | null = this.pendingBossType) {
+    return type === 'mini1' || type === 'wall' || type === 'asteroid';
   }
 
   getAsteroidBeltCount() {
@@ -556,6 +561,9 @@ export class GameEngine {
     }
     
     if (this.inBossWarningSequence) {
+        if (this.isSubBossWarning() && this.bossWarningFrame > 0 && this.bossWarningFrame % 36 === 0) {
+            audioService.playSound('siren');
+        }
         this.bossWarningFrame--;
         if (this.bossWarningFrame <= 0) {
             this.inBossWarningSequence = false;
@@ -822,14 +830,27 @@ export class GameEngine {
         this.spawnPowerup(Math.random() * (this.width - 40), -40);
     }
 
-    const currentRate = Math.max(25, GAME_CONFIG.BASE_SPAWN_RATE - ((this.wave - 1) * 10));
+    const currentRate = this.wave === 1
+      ? GAME_CONFIG.BASE_SPAWN_RATE + 10
+      : Math.max(22, GAME_CONFIG.BASE_SPAWN_RATE - ((this.wave - 1) * 12));
 
     if (this.frameCount % currentRate === 0) {
       const typeRoll = Math.random();
       const x = Math.random() * (this.width - 40);
       let enemyType = EntityType.ENEMY_DRONE;
       
-      if (this.stats.bossProgress < 0.3) {
+      if (this.wave === 1) {
+        if (this.stats.bossProgress < 0.3) {
+          if (typeRoll > 0.88) enemyType = EntityType.ENEMY_SWARM;
+        } else if (this.stats.bossProgress < 0.7) {
+          if (typeRoll > 0.9) enemyType = EntityType.ENEMY_SWARM;
+          else if (typeRoll > 0.64) enemyType = EntityType.ENEMY_BRICK;
+        } else {
+          if (typeRoll > 0.9) enemyType = EntityType.ENEMY_SWARM;
+          else if (typeRoll > 0.7) enemyType = EntityType.ENEMY_BRICK;
+          else if (typeRoll > 0.44) enemyType = EntityType.ENEMY_JOURNAL;
+        }
+      } else if (this.stats.bossProgress < 0.3) {
         if (typeRoll > 0.7) enemyType = EntityType.ENEMY_SWARM;
       } else if (this.stats.bossProgress < 0.7) {
         if (typeRoll > 0.8) enemyType = EntityType.ENEMY_SWARM;
@@ -846,8 +867,8 @@ export class GameEngine {
 
   createEnemy(type: EntityType, x: number, y: number) {
     const e = new Entity(type, x, y);
-    const hpMult = 1 + (this.wave * 0.3);
-    const speedBoost = 1 + (this.wave * 0.1);
+    const hpMult = this.wave === 1 ? 1 : 1 + (this.wave * 0.34);
+    const speedBoost = this.wave === 1 ? 1 : 1 + (this.wave * 0.11);
     e.variant = Math.floor(Math.random() * 100);
     
     if (type === EntityType.ENEMY_DRONE) {
@@ -889,7 +910,7 @@ export class GameEngine {
     const mb = new Entity(EntityType.MINI_BOSS, this.width/2 - 50, -100);
     mb.width = 140;
     mb.height = 160;
-    mb.hp = 45 + (this.wave * 25);
+    mb.hp = this.wave === 1 ? 52 : 45 + (this.wave * 25);
     mb.maxHp = mb.hp;
     mb.vy = 2;
     mb.color = '#fb7185';
@@ -924,7 +945,7 @@ export class GameEngine {
   }
 
   spawnAsteroidBelt() {
-    const count = Math.min(18, 10 + (this.wave * 2));
+    const count = Math.min(24, 12 + (this.wave * 3));
     const lanes = Math.max(4, Math.min(7, Math.floor(this.width / 88)));
     const laneWidth = this.width / lanes;
     this.asteroidBeltMaxCount = count;
@@ -1026,9 +1047,10 @@ export class GameEngine {
 
   spawnBoss() {
     const boss = new Entity(EntityType.BOSS, this.width / 2 - 100, -200);
+    const phase = Math.max(1, this.stats.wave);
     boss.width = 220;
     boss.height = 200;
-    boss.hp = 220 + (this.stats.wave * 100);
+    boss.hp = phase === 1 ? 235 : 220 + (phase * 105);
     boss.maxHp = boss.hp;
     boss.variant = (this.stats.wave - 1) % 3;
     boss.color = '#990000';
@@ -1081,16 +1103,9 @@ export class GameEngine {
   }
 
   spawnBossBeam(boss: Entity, phase: number, pulseIndex: number) {
-    const beamWidth = Math.min(118, 76 + (phase * 8));
+    const beamWidth = Math.min(112, 76 + (phase * 7));
     const bossCenterX = boss.x + boss.width / 2;
-    const playerCenterX = this.player.x + this.player.width / 2;
-    const playerNearEdge = playerCenterX < this.width * 0.18 || playerCenterX > this.width * 0.82;
-    const aimStrength = Math.min(0.98, (phase <= 1 ? 0.5 : 0.66 + phase * 0.08) + (playerNearEdge ? 0.2 : 0));
-    const baseAimX = bossCenterX + ((playerCenterX - bossCenterX) * aimStrength);
-    const sweep = phase >= 3 && pulseIndex > 0
-      ? (pulseIndex % 2 === 0 ? -1 : 1) * Math.min(56, phase * 16)
-      : 0;
-    const beamCenterX = Math.max(beamWidth / 2, Math.min(this.width - beamWidth / 2, baseAimX + sweep));
+    const beamCenterX = Math.max(beamWidth / 2, Math.min(this.width - beamWidth / 2, bossCenterX));
     const beam = new Entity(EntityType.PROJECTILE, beamCenterX - beamWidth / 2, boss.y + boss.height - 20);
     beam.isBeam = true;
     beam.width = beamWidth;
@@ -1098,7 +1113,7 @@ export class GameEngine {
     beam.life = phase <= 1 ? 68 : Math.max(18, 32 - phase * 3);
     beam.maxLife = beam.life;
     beam.color = phase >= 3 ? '#ff7a18' : '#ff0000';
-    beam.beamAnchorOffsetX = beam.x - boss.x;
+    beam.beamAnchorOffsetX = boss.width / 2 - beamWidth / 2;
     this.entities.push(beam);
 
     audioService.playSound(pulseIndex === 0 ? 'boss_roar' : 'electricity');
@@ -1110,10 +1125,11 @@ export class GameEngine {
     const speedMult = 1 + (phase * 0.1);
     const playerCenterX = this.player.x + this.player.width / 2;
     const playerNearEdge = playerCenterX < this.width * 0.18 || playerCenterX > this.width * 0.82;
+    const hasActiveBeam = this.entities.some(e => e.isBeam && !e.markedForDeletion);
     if (boss.y < 80) boss.vy = 2;
     else {
       boss.vy = 0;
-      if (!boss.isCharging) {
+      if (!boss.isCharging && !hasActiveBeam) {
           const hoverOffset = Math.sin(boss.attackTimer * 0.03) * (playerNearEdge ? 1.4 : 3);
           const edgeLead = playerNearEdge
             ? (playerCenterX < this.width / 2 ? -boss.width * 0.24 : boss.width * 0.24)
@@ -1139,10 +1155,18 @@ export class GameEngine {
           this.spawnBossBurst(boss, phase);
         }
     } else if (attackCycle >= burstEnd && attackCycle < chargeEnd) {
+        if (attackCycle === burstEnd || boss.beamLaneSign === 0) {
+          boss.beamLaneSign = Math.random() < 0.5 ? -1 : 1;
+        }
+
         boss.isCharging = true;
-        boss.x += (Math.random() - 0.5) * 5; 
+        const laneCenterX = boss.beamLaneSign < 0 ? this.width * 0.3 : this.width * 0.7;
+        const laneTargetX = laneCenterX - boss.width / 2;
+        boss.x += (laneTargetX - boss.x) * (0.038 + Math.min(0.02, phase * 0.003));
+        boss.x += Math.sin(boss.attackTimer * 0.24) * 1.2;
         if (boss.attackTimer % 15 === 0) {
-             this.spawnFloatingText(boss.x + boss.width/2, boss.y, phase >= 2 ? "LOCKING PULSE!" : "CHARGING BEAM!", "#ff0000");
+             const laneLabel = boss.beamLaneSign < 0 ? "LEFT" : "RIGHT";
+             this.spawnFloatingText(boss.x + boss.width/2, boss.y, `${laneLabel} BEAM!`, "#ff0000");
         }
     } else {
         const pulseIndex = Math.floor((attackCycle - chargeEnd) / Math.max(18, 26 - phase * 2));
@@ -1151,7 +1175,8 @@ export class GameEngine {
         if (pulseIndex >= 0 && pulseIndex < pulseCount && pulseFrame === 0) {
           this.spawnBossBeam(boss, phase, pulseIndex);
         }
-        boss.isCharging = pulseIndex >= 0 && pulseIndex < pulseCount;
+        boss.isCharging = (pulseIndex >= 0 && pulseIndex < pulseCount) || hasActiveBeam;
+        if (!boss.isCharging) boss.beamLaneSign = 0;
     }
   }
 
@@ -1372,8 +1397,11 @@ export class GameEngine {
             if (isTargetEnemy && intersect(e, target)) {
                e.markedForDeletion = true;
                
-               // Missiles do more damage
-               const dmg = e.type === EntityType.MISSILE ? 5 : 1;
+               // Boss-type enemies get shaved down a bit faster so fights don't drag.
+               const isBossTarget = target.type === EntityType.BOSS || target.type === EntityType.MINI_BOSS;
+               const dmg = e.type === EntityType.MISSILE
+                 ? (isBossTarget ? 8 : 5)
+                 : (isBossTarget ? 1.45 : 1);
                target.hp -= dmg;
                
                if (target.hp <= 0) {
@@ -1395,6 +1423,11 @@ export class GameEngine {
 
                  if (target.type === EntityType.MINI_BOSS) {
                      this.stats.score += 500 * waveMult;
+                     if (this.stats.wave === 1) {
+                         for (let i=0; i<4; i++) {
+                             this.spawnCoin(target.x + Math.random()*target.width, target.y + Math.random()*target.height);
+                         }
+                     }
                      this.spawnPowerup(target.x, target.y);
                      // Removed second powerup
                      this.miniBossRef = null; 
@@ -1599,6 +1632,51 @@ export class GameEngine {
     ctx.restore();
   }
 
+  drawSubBossWarning(ctx: CanvasRenderingContext2D) {
+    if (!this.pendingBossType || !this.isSubBossWarning()) return;
+
+    const duration = this.bossWarningDuration || 90;
+    const age = duration - this.bossWarningFrame;
+    const alpha = Math.max(0, Math.min(1, age / 10, this.bossWarningFrame / 18));
+    const flash = Math.sin(this.frameCount * 0.65) > 0 ? 1 : 0.38;
+    const labels: Record<Exclude<BossWarningType, 'gatekeeper'>, string> = {
+      mini1: 'BOTTLENECK SURGE',
+      wall: 'PAYWALL FORMATION',
+      asteroid: 'ASTEROID BELT'
+    };
+    const label = labels[this.pendingBossType as Exclude<BossWarningType, 'gatekeeper'>];
+    const panelWidth = Math.min(this.width - 42, 360);
+    const panelHeight = 74;
+    const x = (this.width - panelWidth) / 2;
+    const y = Math.max(118, this.height * 0.26);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = '#fb7185';
+    ctx.shadowBlur = 24 * flash;
+    ctx.fillStyle = `rgba(127, 29, 29, ${0.72 + (flash * 0.18)})`;
+    ctx.strokeStyle = `rgba(254, 240, 138, ${0.62 + (flash * 0.3)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelWidth, panelHeight, 18);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = `rgba(254, 240, 138, ${0.16 + (flash * 0.2)})`;
+    ctx.fillRect(x + 10, y + 11, panelWidth - 20, 6);
+    ctx.fillRect(x + 10, y + panelHeight - 17, panelWidth - 20, 6);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 12px Orbitron';
+    ctx.fillText('WARNING', this.width / 2, y + 26);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px Orbitron';
+    ctx.fillText(label, this.width / 2, y + 52);
+    ctx.restore();
+  }
+
   // ... draw methods remain the same ...
   // (Included to prevent file truncation issues, though only collision logic changed significantly)
   draw(ctx: CanvasRenderingContext2D) {
@@ -1610,6 +1688,8 @@ export class GameEngine {
     
     if (this.inBossWarningSequence && this.pendingBossType === 'gatekeeper') {
         this.drawBossWarningComms(ctx);
+    } else if (this.inBossWarningSequence) {
+        this.drawSubBossWarning(ctx);
     }
     
     ctx.save();

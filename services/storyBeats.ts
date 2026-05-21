@@ -29,7 +29,7 @@ export const STORY_BEATS: StoryBeat[] = [
     portrait: ASSETS.FOUNDER_JEFFREY,
     accent: 'from-emerald-300 via-cyan-300 to-sky-400',
     title: 'Predatory Drift',
-    text: '.... Nice flying. Phase two is crawling with predatory journals and review traps. If you want a leaderboard run, upgrade early. Top pilots can help point funding credits toward ResearchHub proposals.',
+    text: '.... Nice flying. Wave two is crawling with predatory journals and review traps. If you want a leaderboard run, upgrade early. Top pilots can help point funding credits toward ResearchHub proposals.',
     objective: 'Survive the faster journals and prepare for the first bottleneck boss.'
   },
   {
@@ -59,7 +59,7 @@ export const STORY_BEATS: StoryBeat[] = [
     portrait: ASSETS.FOUNDER_JEFFREY,
     accent: 'from-red-300 via-yellow-200 to-cyan-300',
     title: 'The Gatekeeper Core',
-    text: '.... Final phase. The bottleneck core is adapting to your signal. Expect swarms, bricks, and beam attacks together. Free the Galaxy from slow science. Fight for clarity.',
+    text: '.... Final wave. The bottleneck core is adapting to your signal. Expect swarms, bricks, and beam attacks together. Free the Galaxy from slow science. Fight for clarity.',
     objective: 'Stay mobile, preserve lives, and collapse the final review wall.'
   }
 ];

@@ -85,13 +85,10 @@ const StoryTransmission: React.FC<StoryTransmissionProps> = ({ beat, onComplete 
             <span className="arcade-font text-sm font-black uppercase tracking-[0.18em] text-white sm:text-lg">
               {beat.speaker}
             </span>
-            <span className="border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-100">
-              {beat.role}
-            </span>
           </div>
 
           <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-200/80">
-            Phase {beat.phase}: {beat.title}
+            Wave {beat.phase}: {beat.title}
           </div>
 
           <p className="mt-3 min-h-[112px] font-mono text-sm leading-relaxed text-cyan-50 sm:min-h-[120px] sm:text-base">

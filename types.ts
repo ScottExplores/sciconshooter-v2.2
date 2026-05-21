@@ -62,6 +62,7 @@ export interface LeaderboardEntry {
 export interface LeaderboardData {
   scores: LeaderboardEntry[];
   monthlyScores: LeaderboardEntry[];
+  remoteSaved?: boolean;
 }
 
 export interface Stats {

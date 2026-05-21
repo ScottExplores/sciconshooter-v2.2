@@ -68,11 +68,15 @@ const dedupeAndSort = (scores: LeaderboardEntry[], limit: number): LeaderboardEn
   return normalized.slice(0, limit);
 };
 
-const toLeaderboardData = (scores: LeaderboardEntry[]): LeaderboardData => {
+const toLeaderboardData = (scores: LeaderboardEntry[], remoteSaved?: boolean): LeaderboardData => {
   const allTime = dedupeAndSort(scores, MAX_SCORES);
   const monthlyScores = dedupeAndSort(scores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
 
-  return { scores: allTime, monthlyScores };
+  return {
+    scores: allTime,
+    monthlyScores,
+    ...(typeof remoteSaved === 'boolean' ? { remoteSaved } : {})
+  };
 };
 
 const readRemoteLeaderboardData = async (): Promise<LeaderboardData> => {
@@ -119,7 +123,7 @@ const writeRemoteLeaderboardData = async (entry: LeaderboardEntry): Promise<Lead
     ? dedupeAndSort(data.monthlyScores, MAX_MONTHLY_SCORES)
     : dedupeAndSort(nextScores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
 
-  return { scores: nextScores, monthlyScores };
+  return { scores: nextScores, monthlyScores, remoteSaved: true };
 };
 
 export const getLeaderboardData = async (): Promise<LeaderboardData> => {
@@ -166,6 +170,6 @@ export const saveScore = async (
     return await writeRemoteLeaderboardData(newEntry);
   } catch (error) {
     console.error("Save error:", error);
-    return toLeaderboardData([newEntry]);
+    return toLeaderboardData([newEntry], false);
   }
 };
