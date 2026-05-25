@@ -42,4 +42,14 @@ For local testing against a deployed leaderboard, set `VITE_LEADERBOARD_API_URL`
 
 ## Wallet testing
 
-The app supports the Reown AppKit wallet picker, injected browser wallets, Coinbase Wallet, Base Account, and Farcaster mini app wallets. For production, add `VITE_REOWN_PROJECT_ID` from Reown Cloud. `VITE_WALLETCONNECT_PROJECT_ID` also works. Local dev uses Reown's localhost-only demo project id so the wallet picker can be tested without extra setup.
+The app uses thirdweb `ConnectButton` for wallet connection. Add `VITE_THIRDWEB_CLIENT_ID` from the thirdweb dashboard before running locally or deploying. The wallet modal recommends Base Account and also supports in-app login through email, Google, Discord, Telegram, Farcaster, and X, plus MetaMask, Rainbow, Rabby, Binance, Coinbase Wallet, Ledger, and Trust Wallet.
+
+Social login uses thirdweb in-app wallets with redirect auth so mobile and embedded browsers do not have to allow popups. In the thirdweb dashboard, keep In-App Wallets enabled and add domain restrictions for every place the app runs, for example `localhost:5173`, `sciconshooter.xyz`, and `www.sciconshooter.xyz`. Use the public client ID in `VITE_THIRDWEB_CLIENT_ID`; never put the secret key in frontend code.
+
+RSC funding uses thirdweb widgets on Base:
+
+- Mission credits use a direct Base ERC-20 RSC transfer to the treasury wallet, then add credits after the transaction confirms.
+- The Get RSC tab opens the Aerodrome USDC-to-RSC route because thirdweb Bridge may not support RSC routing until it is requested/enabled in the Bridge dashboard.
+- `BuyWidget` is limited to Base USDC funding, which players can swap into RSC before buying credits.
+
+Credits bought from the home/profile menu are stored as wallet-linked profile credits. Credits bought from the lab are added to the active mission immediately. If a player has profile credits, the lab shows a Deploy button to move them into the current mission.

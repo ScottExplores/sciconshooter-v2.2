@@ -70,6 +70,7 @@ export interface Stats {
   highScore: number;
   wave: number;
   coins: number;
+  profileCredits: number; // Wallet-linked credits purchased outside an active mission
   totalCoins: number; // New: Track total lifetime coins for "Funded" score
   enemiesDefeated: number;
   lives: number;

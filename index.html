@@ -350,6 +350,24 @@
         background: #dbeafe;
         border-color: rgba(96, 165, 250, 0.55);
       }
+
+      @media (max-width: 640px) {
+        .tw-modal {
+          top: calc(env(safe-area-inset-top) + 12px) !important;
+          right: 10px !important;
+          bottom: auto !important;
+          left: 10px !important;
+          width: auto !important;
+          max-width: none !important;
+          max-height: calc(100dvh - env(safe-area-inset-top) - 24px) !important;
+          border-radius: 22px !important;
+          overflow: hidden !important;
+        }
+
+        .tw-modal [data-scrolly="true"] {
+          max-height: calc(100dvh - env(safe-area-inset-top) - 26px) !important;
+        }
+      }
     </style>
   </head>
   <body>

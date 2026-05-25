@@ -12,6 +12,7 @@ interface UpgradeShopProps {
   onConnectWallet: (connectorId?: string) => void;
   onBuyMissionCredits: (rscAmount: number) => void;
   onOpenRscSwap: () => void;
+  onClaimProfileCredits: () => void;
   labFundingStatus: DonationStatus;
   labFundingHash: string;
   labFundingError: string;
@@ -79,7 +80,7 @@ const purchasablePowerups: FounderPowerupType[] = [
 ];
 
 const statusText: Record<DonationStatus, string> = {
-  idle: 'Confirmed transfers add credits to this mission.',
+  idle: 'Base confirms the RSC transfer before adding credits.',
   switching_network: 'Switching to Base...',
   processing: 'Confirm the RSC transfer in your wallet.',
   confirming: 'Waiting for Base confirmation...',
@@ -97,6 +98,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   onConnectWallet,
   onBuyMissionCredits,
   onOpenRscSwap,
+  onClaimProfileCredits,
   labFundingStatus,
   labFundingHash,
   labFundingError,
@@ -302,6 +304,26 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                       {wallet.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
                     </button>
                     {wallet.error ? <div className="mt-2 px-1 text-[10px] leading-relaxed text-red-300">{wallet.error}</div> : null}
+                  </div>
+                ) : null}
+
+                {stats.profileCredits > 0 ? (
+                  <div className="mt-3 rounded-2xl border border-yellow-200/25 bg-yellow-200/10 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-mono text-[9px] font-black uppercase tracking-[0.14em] text-yellow-100">Profile bank</div>
+                        <div className="mt-1 text-xs text-slate-300">
+                          {stats.profileCredits} wallet-linked credits ready for this mission.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onClaimProfileCredits}
+                        className="rounded-xl border border-yellow-100/40 bg-yellow-200 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-950 transition hover:bg-white"
+                      >
+                        Deploy
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
