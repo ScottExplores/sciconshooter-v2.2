@@ -4,9 +4,14 @@ import { darkTheme } from 'thirdweb/react';
 import { createWallet, inAppWallet } from 'thirdweb/wallets';
 import { ASSETS, DONATION_CONFIG } from '../constants';
 
+// thirdweb client IDs are public browser identifiers. Keep Vercel env support,
+// but ship a fallback so wallet connect does not disappear if env vars are missed.
+const fallbackThirdwebClientId = '23842a2bdbe53652f0cae531907a3530';
+
 export const thirdwebClientId = (
-  import.meta.env.VITE_THIRDWEB_CLIENT_ID as string | undefined
-)?.trim();
+  (import.meta.env.VITE_THIRDWEB_CLIENT_ID as string | undefined)?.trim() ||
+  fallbackThirdwebClientId
+);
 
 export const thirdwebClient = thirdwebClientId
   ? createThirdwebClient({ clientId: thirdwebClientId })
