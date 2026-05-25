@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BuyWidget } from 'thirdweb/react';
+import { BuyWidget, SwapWidget } from 'thirdweb/react';
 import { ASSETS, DONATION_CONFIG } from '../constants';
 import {
   rscTokenInfo,
@@ -23,10 +23,11 @@ interface FundingWidgetModalProps {
 }
 
 const usdcAddress = DONATION_CONFIG.USDC_CONTRACT_ADDRESS as `0x${string}`;
+const rscAddress = DONATION_CONFIG.RSC_CONTRACT_ADDRESS as `0x${string}`;
 
 const fundingTabs: Array<{ mode: FundingWidgetMode; label: string; copy: string }> = [
   { mode: 'checkout', label: 'Credits', copy: 'Send RSC on Base to the treasury and receive mission credits.' },
-  { mode: 'swap', label: 'Get RSC', copy: 'Open the Aerodrome USDC-to-RSC route. Return here after the swap finishes.' },
+  { mode: 'swap', label: 'Get RSC', copy: 'Swap Base USDC into ResearchCoin, or open Aerodrome if routing is unavailable.' },
   { mode: 'buy', label: 'Buy USDC', copy: 'Use thirdweb to add Base USDC, then swap that USDC into RSC.' }
 ];
 
@@ -126,24 +127,26 @@ const FundingWidgetModal: React.FC<FundingWidgetModalProps> = ({
             {fundingTabs.find((tab) => tab.mode === mode)?.copy}
           </p>
 
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => (
-              <button
-                key={amount}
-                type="button"
-                onClick={() => handlePackageChange(amount)}
-                className={`rounded-2xl border p-3 text-left transition ${
-                  selectedRscAmount === amount
-                    ? 'border-yellow-200 bg-yellow-200 text-slate-950'
-                    : 'border-white/10 bg-black/30 text-white hover:border-yellow-200/50'
-                }`}
-              >
-                <div className="font-mono text-[9px] font-black uppercase tracking-[0.14em]">{amount} RSC</div>
-                <div className="mt-1 text-lg font-black">{amount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC}</div>
-                <div className="text-[9px] uppercase tracking-[0.12em] opacity-70">credits</div>
-              </button>
-            ))}
-          </div>
+          {mode === 'checkout' ? (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => handlePackageChange(amount)}
+                  className={`rounded-2xl border p-3 text-left transition ${
+                    selectedRscAmount === amount
+                      ? 'border-yellow-200 bg-yellow-200 text-slate-950'
+                      : 'border-white/10 bg-black/30 text-white hover:border-yellow-200/50'
+                  }`}
+                >
+                  <div className="font-mono text-[9px] font-black uppercase tracking-[0.14em]">{amount} RSC</div>
+                  <div className="mt-1 text-lg font-black">{amount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC}</div>
+                  <div className="text-[9px] uppercase tracking-[0.12em] opacity-70">credits</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {!thirdwebClient ? (
             <div className="mt-4 rounded-2xl border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">
@@ -183,20 +186,39 @@ const FundingWidgetModal: React.FC<FundingWidgetModalProps> = ({
               ) : null}
 
               {mode === 'swap' ? (
-                <div className="rounded-[22px] border border-cyan-300/20 bg-black/32 p-4">
-                  <div className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200">USDC &rarr; RSC</div>
-                  <h3 className="mt-1 text-lg font-black text-white">Open Aerodrome swap</h3>
-                  <p className="mt-2 text-xs leading-relaxed text-slate-300">
-                    thirdweb Bridge is not routing RSC yet, so the reliable route is Aerodrome on Base. Swap USDC to RSC there, return to SciCon Shooter, then use the Credits tab.
-                  </p>
-                  <a
-                    href={DONATION_CONFIG.RSC_SWAP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 block rounded-2xl border border-cyan-200/45 bg-cyan-300 px-4 py-3 text-center text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-white"
-                  >
-                    Open RSC swap
-                  </a>
+                <div className="space-y-3">
+                  <SwapWidget
+                    client={thirdwebClient}
+                    prefill={{
+                      sellToken: {
+                        chainId: thirdwebBaseChain.id,
+                        tokenAddress: usdcAddress,
+                        amount: '1'
+                      },
+                      buyToken: {
+                        chainId: thirdwebBaseChain.id,
+                        tokenAddress: rscAddress
+                      }
+                    }}
+                    showThirdwebBranding={false}
+                    theme={thirdwebTheme}
+                  />
+
+                  <div className="rounded-[22px] border border-cyan-300/20 bg-black/32 p-4">
+                    <div className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200">Fallback route</div>
+                    <h3 className="mt-1 text-base font-black text-white">Aerodrome USDC &rarr; RSC</h3>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-300">
+                      If thirdweb cannot route ResearchCoin yet, use Aerodrome on Base. Swap USDC to RSC there, return here, then use the Credits tab.
+                    </p>
+                    <a
+                      href={DONATION_CONFIG.RSC_SWAP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 block rounded-2xl border border-cyan-200/45 bg-cyan-300 px-4 py-3 text-center text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-white"
+                    >
+                      Open Aerodrome swap
+                    </a>
+                  </div>
                 </div>
               ) : null}
 
