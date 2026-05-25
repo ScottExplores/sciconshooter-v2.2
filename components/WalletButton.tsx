@@ -117,8 +117,7 @@ const WalletButton: React.FC<WalletButtonProps> = ({
                     },
                     metadata: {
                       name: 'Fund SciCon Shooter',
-                      description: 'Buy Base USDC, then swap to RSC for mission credits.',
-                      image: ASSETS.RSC_TOKEN
+                      description: 'Buy Base USDC, then swap to RSC for mission credits.'
                     },
                     showThirdwebBranding: false
                   }

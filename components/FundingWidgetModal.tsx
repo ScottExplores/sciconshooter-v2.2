@@ -231,7 +231,6 @@ const FundingWidgetModal: React.FC<FundingWidgetModalProps> = ({
                   tokenAddress={usdcAddress}
                   title="Buy Base USDC"
                   description="Buy USDC on Base, then swap USDC into RSC before funding mission credits."
-                  image={ASSETS.RSC_TOKEN}
                   currency="USD"
                   paymentMethods={['crypto', 'card']}
                   showThirdwebBranding={false}
