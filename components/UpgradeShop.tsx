@@ -139,6 +139,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [selectedFundingToken, setSelectedFundingToken] = useState<FundingCreditToken>('RSC');
   const [deployAmountInput, setDeployAmountInput] = useState('');
+  const [isDeployBankOpen, setIsDeployBankOpen] = useState(false);
   const selectedTokenMeta = labFundingTokens[selectedFundingToken];
   const profileCredits = stats.profileCredits || 0;
   const deployAmount = Math.max(0, Math.min(profileCredits, Math.floor(Number(deployAmountInput) || 0)));
@@ -146,6 +147,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   useEffect(() => {
     if (profileCredits <= 0) {
       setDeployAmountInput('');
+      setIsDeployBankOpen(false);
       return;
     }
 
@@ -155,6 +157,22 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
       return String(profileCredits);
     });
   }, [profileCredits]);
+
+  const openDeployBank = () => {
+    if (profileCredits <= 0) return;
+    setDeployAmountInput((current) => {
+      const currentAmount = Math.floor(Number(current) || 0);
+      if (currentAmount > 0 && currentAmount <= profileCredits) return current;
+      return String(profileCredits);
+    });
+    setIsDeployBankOpen(true);
+  };
+
+  const handleDeployCredits = () => {
+    if (deployAmount <= 0) return;
+    onClaimProfileCredits(deployAmount);
+    setIsDeployBankOpen(false);
+  };
 
   const getCost = (type: keyof Upgrades) => {
     const level = stats.upgrades[type];
@@ -229,50 +247,30 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     <img src={ASSETS.RSC_TOKEN} className="h-5 w-5" alt="Credits" />
                     <span className="font-mono text-2xl font-bold text-white">{stats.coins}</span>
                   </div>
-                  <div className="mt-2 rounded-xl border border-white/10 bg-black/28 p-2">
+                  <button
+                    type="button"
+                    onClick={openDeployBank}
+                    disabled={profileCredits <= 0}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/28 p-2 text-left transition hover:border-yellow-100/45 hover:bg-yellow-200/10 disabled:cursor-not-allowed disabled:opacity-65"
+                    aria-label="Open wallet bank deploy controls"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-mono text-[8px] font-black uppercase tracking-[0.14em] text-yellow-100/80">Wallet Bank</div>
-                        <div className="mt-0.5 text-[11px] font-bold text-white">{profileCredits} ready</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <img src={ASSETS.RSC_TOKEN} className="h-4 w-4" alt="" />
+                          <span className="font-mono text-base font-black text-yellow-50">{profileCredits}</span>
+                          <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">ready</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={profileCredits}
-                        step={1}
-                        value={deployAmountInput}
-                        onChange={(event) => setDeployAmountInput(event.target.value)}
-                        disabled={profileCredits <= 0}
-                        aria-label="Credits to deploy"
-                        className="min-w-0 flex-1 rounded-lg border border-yellow-100/20 bg-black/35 px-2 py-1.5 text-right font-mono text-[11px] font-black text-yellow-50 outline-none focus:border-yellow-100/70 disabled:text-slate-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => onClaimProfileCredits(deployAmount)}
-                        disabled={deployAmount <= 0}
-                        className="rounded-lg border border-yellow-100/40 bg-yellow-200 px-2 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
-                      >
+                      <span className="rounded-full border border-yellow-100/25 bg-yellow-200/10 px-2 py-1 text-[8px] font-black uppercase tracking-[0.1em] text-yellow-100">
                         Deploy
-                      </button>
+                      </span>
                     </div>
-                    {profileCredits > 0 ? (
-                      <div className="mt-1 flex items-center justify-end gap-1.5">
-                        {[100, profileCredits].filter((amount, index, list) => amount > 0 && amount <= profileCredits && list.indexOf(amount) === index).map((amount) => (
-                          <button
-                            key={amount}
-                            type="button"
-                            onClick={() => setDeployAmountInput(String(amount))}
-                            className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[7px] font-black uppercase tracking-[0.08em] text-yellow-100/80 transition hover:border-yellow-100/50"
-                          >
-                            {amount === profileCredits ? 'All' : amount}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                    <div className="mt-1 text-[9px] font-semibold leading-tight text-slate-500">
+                      {profileCredits > 0 ? 'Tap to choose how many enter this run.' : 'Buy credits below to fill the bank.'}
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -528,6 +526,104 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
           </div>
         </div>
       </div>
+
+      {isDeployBankOpen ? (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/72 p-4 backdrop-blur-md">
+          <button
+            type="button"
+            className="absolute inset-0"
+            onClick={() => setIsDeployBankOpen(false)}
+            aria-label="Close deploy wallet bank"
+          />
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleDeployCredits();
+            }}
+            className="relative w-full max-w-sm overflow-hidden rounded-[28px] border border-yellow-200/30 bg-slate-950 shadow-[0_28px_90px_rgba(0,0,0,0.7)]"
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-100 to-transparent" />
+
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-yellow-100/80">Wallet Bank</div>
+                  <h3 className="arcade-font mt-1 text-xl font-black uppercase tracking-widest text-white">Deploy Credits</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                    Move wallet-linked credits into this mission. Only deployed credits can be spent on upgrades during the run.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDeployBankOpen(false)}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs font-black text-white transition hover:border-yellow-100/60"
+                  aria-label="Close deploy credits"
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-yellow-100/15 bg-yellow-200/8 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Available</span>
+                  <span className="flex items-center gap-2 font-mono text-lg font-black text-yellow-50">
+                    <img src={ASSETS.RSC_TOKEN} className="h-5 w-5" alt="" />
+                    {profileCredits}
+                  </span>
+                </div>
+
+                <label className="mt-4 block">
+                  <span className="sr-only">Credits to deploy</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={profileCredits}
+                    step={1}
+                    value={deployAmountInput}
+                    onChange={(event) => setDeployAmountInput(event.target.value)}
+                    autoFocus
+                    className="w-full rounded-2xl border border-yellow-100/25 bg-black/45 px-4 py-4 text-center font-mono text-4xl font-black text-yellow-50 outline-none transition focus:border-yellow-100 focus:bg-black/70"
+                  />
+                </label>
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {[100, 500, profileCredits]
+                    .filter((amount, index, list) => amount > 0 && amount <= profileCredits && list.indexOf(amount) === index)
+                    .map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => setDeployAmountInput(String(amount))}
+                        className="rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-yellow-100 transition hover:border-yellow-100/50 hover:bg-yellow-200/10"
+                      >
+                        {amount === profileCredits ? 'All' : amount}
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                <button
+                  type="submit"
+                  disabled={deployAmount <= 0}
+                  className="rounded-2xl border border-yellow-100/45 bg-yellow-200 px-4 py-4 text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
+                >
+                  Deploy {deployAmount > 0 ? deployAmount : ''} Credits
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDeployBankOpen(false)}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-xs font-black uppercase tracking-[0.12em] text-slate-300 transition hover:border-white/30"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 };
