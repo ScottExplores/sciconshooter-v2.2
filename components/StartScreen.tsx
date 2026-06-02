@@ -6,7 +6,6 @@ import {
 } from '../services/researchHubProposals';
 import {
   formatRscPrice,
-  formatRscPriceChange,
   getKarmaMarketPrice,
   getRscMarketPrice,
   RscMarketPrice
@@ -121,11 +120,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
       proposal: proposals[(activeProposalIndex + offset) % proposals.length]
     })) : []
   ), [activeProposalIndex, proposals]);
-  const rscPriceChange = formatRscPriceChange(rscMarketPrice?.priceChange24h);
-  const rscPriceChangeIsPositive = (rscMarketPrice?.priceChange24h ?? 0) >= 0;
-  const karmaPriceChange = formatRscPriceChange(karmaMarketPrice?.priceChange24h);
-  const karmaPriceChangeIsPositive = (karmaMarketPrice?.priceChange24h ?? 0) >= 0;
-
   const moveProposalDeck = (direction: 1 | -1) => {
     if (proposals.length < 2) return;
 
@@ -375,11 +369,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
           <span className="text-xs font-black text-white">
             {rscPriceStatus === 'loading' ? '...' : rscPriceStatus === 'error' ? '--' : formatRscPrice(rscMarketPrice?.priceUsd)}
           </span>
-          {rscPriceChange ? (
-            <span className={`hidden rounded-full px-1.5 py-0.5 text-[8px] font-black min-[420px]:inline ${rscPriceChangeIsPositive ? 'bg-emerald-300/18 text-emerald-100' : 'bg-red-300/18 text-red-100'}`}>
-              {rscPriceChange}
-            </span>
-          ) : null}
         </a>
 
         <a
@@ -394,11 +383,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
           <span className="text-xs font-black text-white">
             {karmaPriceStatus === 'loading' ? '...' : karmaPriceStatus === 'error' ? '--' : formatRscPrice(karmaMarketPrice?.priceUsd)}
           </span>
-          {karmaPriceChange ? (
-            <span className={`hidden rounded-full px-1.5 py-0.5 text-[8px] font-black min-[420px]:inline ${karmaPriceChangeIsPositive ? 'bg-emerald-300/18 text-emerald-100' : 'bg-red-300/18 text-red-100'}`}>
-              {karmaPriceChange}
-            </span>
-          ) : null}
         </a>
       </div>
 
@@ -414,7 +398,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_122px] gap-3 sm:grid-cols-[minmax(0,1fr)_190px] lg:grid-cols-[1fr_260px]">
+          <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-2 min-[420px]:grid-cols-[minmax(0,1fr)_148px] sm:grid-cols-[minmax(0,1fr)_190px] sm:gap-3 lg:grid-cols-[1fr_260px]">
             <button
               onClick={onStart}
               className="group flex min-h-[74px] items-center justify-between rounded-[22px] border border-blue-300/25 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-left shadow-[0_20px_46px_rgba(37,99,235,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_56px_rgba(37,99,235,0.44)]"
@@ -428,36 +412,36 @@ const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </button>
 
-            <div className="relative rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-3 sm:p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-100/80">Weekly Allocation</div>
+            <div className="relative rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-2.5 sm:p-4">
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="max-w-[86px] text-[8px] font-black uppercase leading-tight tracking-[0.16em] text-yellow-100/80 min-[420px]:max-w-none min-[420px]:text-[9px] sm:text-[10px] sm:tracking-[0.22em]">Weekly Allocation</div>
                 <button
                   type="button"
                   onClick={() => setShowAllocationInfo((value) => !value)}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-yellow-100/25 bg-yellow-200/10 text-[11px] font-black text-yellow-100 transition hover:border-yellow-100/60 hover:bg-yellow-200/20"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-yellow-100/35 bg-yellow-200/15 text-[10px] font-black text-yellow-100 transition hover:border-yellow-100/60 hover:bg-yellow-200/20 sm:h-7 sm:w-7 sm:text-[11px]"
                   aria-expanded={showAllocationInfo}
                   aria-label="Weekly allocation information"
                 >
                   i
                 </button>
               </div>
-              <div className="relative mt-2 min-h-[64px] overflow-hidden">
+              <div className="relative mt-2 min-h-[66px] overflow-hidden">
                 <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? '-translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
                   <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{weeklyAllocation.daysLeft}</div>
-                  <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
+                  <div className="pb-1 text-right text-[9px] font-semibold uppercase leading-tight tracking-wide text-slate-300 sm:text-xs">
                     days to<br />{weeklyAllocation.endLabel}
                   </div>
                 </div>
                 <div className={`absolute inset-0 flex items-center justify-center text-center transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
                   <div>
-                    <div className="arcade-font text-3xl font-black leading-none text-white sm:text-4xl">{weeklyAllocation.allocationRsc}</div>
-                    <div className="mt-1 text-[13px] font-black uppercase leading-none tracking-[0.24em] text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.45)]">RSC</div>
-                    <div className="mt-1 text-[7px] font-black uppercase leading-tight tracking-[0.18em] text-slate-300">funding credits</div>
+                    <div className="arcade-font text-2xl font-black leading-none text-white min-[420px]:text-3xl sm:text-4xl">{weeklyAllocation.allocationRsc}</div>
+                    <div className="mt-1 text-[11px] font-black uppercase leading-none tracking-[0.18em] text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.45)] sm:text-[13px] sm:tracking-[0.24em]">RSC</div>
+                    <div className="mt-1 text-[6px] font-black uppercase leading-tight tracking-[0.14em] text-slate-300 sm:text-[7px] sm:tracking-[0.18em]">funding credits</div>
                   </div>
                 </div>
               </div>
               {showAllocationInfo ? (
-                <div className="absolute right-3 top-12 z-20 w-[min(240px,calc(100vw-2rem))] rounded-2xl border border-yellow-100/25 bg-slate-950/96 p-3 text-xs font-semibold leading-relaxed text-slate-200 shadow-[0_18px_55px_rgba(0,0,0,0.45)]">
+                <div className="absolute right-0 top-11 z-30 w-[min(232px,calc(100vw-1.5rem))] rounded-2xl border border-yellow-100/35 bg-[#020617] p-3 text-xs font-semibold leading-relaxed text-slate-100 shadow-[0_18px_55px_rgba(0,0,0,0.75)] ring-1 ring-black/80">
                   The weekly No. 1 pilot chooses the ResearchHub proposal pick for the 100 RSC funding-credit signal.
                 </div>
               ) : null}
@@ -766,15 +750,6 @@ const StartScreen: React.FC<StartScreenProps> = ({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   <span className="font-black text-white">About ResearchHub:</span> an open science platform for funding, publishing, peer review, and RSC-powered community rewards.
-                  <a
-                    href={DONATION_CONFIG.KARMA_SITE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 inline-flex items-center gap-1.5 font-black text-purple-100 underline decoration-purple-300/40 underline-offset-4 hover:text-white"
-                  >
-                    <img src={ASSETS.KARMA_TOKEN} alt="" className="h-5 w-5 rounded-full border border-purple-200/35 bg-slate-950 object-cover" />
-                    KARMA promo: we have partnered with KARMA for a limited promotional period, so charity-focused KRMA credits are live.
-                  </a>
                 </p>
                 <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
                   <button onClick={onOpenXProfile} className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-2 text-[10px] font-black text-white transition hover:border-blue-300/50 hover:bg-blue-500/15 sm:flex-none sm:gap-2 sm:px-4 sm:text-xs">
@@ -790,6 +765,18 @@ const StartScreen: React.FC<StartScreenProps> = ({
                 </div>
               </div>
             </footer>
+
+            <a
+              href={DONATION_CONFIG.KARMA_SITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-[22px] border border-purple-200/20 bg-purple-300/10 p-3 text-xs font-semibold leading-relaxed text-purple-100 shadow-[0_14px_40px_rgba(88,28,135,0.18)] backdrop-blur-xl transition hover:border-purple-100/45 hover:bg-purple-300/15"
+            >
+              <img src={ASSETS.KARMA_TOKEN} alt="" className="h-10 w-10 shrink-0 rounded-full border border-purple-200/35 bg-slate-950 object-cover" />
+              <span>
+                <span className="font-black text-white">KARMA promo:</span> SciCon Shooter has partnered with KARMA for a limited promotional period, so charity-focused KRMA credits and the KARMA beam power-up are live.
+              </span>
+            </a>
 
             <a
               href={DONATION_CONFIG.KARMA_SITE_URL}

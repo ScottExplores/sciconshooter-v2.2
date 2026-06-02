@@ -32,6 +32,7 @@ const WalletButton: React.FC<WalletButtonProps> = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const shortAddress = wallet.address ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : '';
+  const tinyAddress = wallet.address ? `...${wallet.address.slice(-4)}` : '';
   const actionIconClass = 'grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-200/18 bg-cyan-300/10 text-cyan-100 shadow-[inset_0_0_18px_rgba(34,211,238,0.08)]';
 
   if (thirdwebClient && wallet.address) {
@@ -40,13 +41,13 @@ const WalletButton: React.FC<WalletButtonProps> = ({
         <button
           type="button"
           onClick={() => setIsMenuOpen((current) => !current)}
-          className="flex items-center gap-2 rounded-full border border-emerald-300/35 bg-black/72 px-2 py-1.5 shadow-[0_0_24px_rgba(16,185,129,0.2)] backdrop-blur-md transition hover:border-emerald-100"
+          className="flex items-center gap-1.5 rounded-full border border-emerald-300/35 bg-black/72 px-1.5 py-1.5 shadow-[0_0_24px_rgba(16,185,129,0.2)] backdrop-blur-md transition hover:border-emerald-100"
           aria-expanded={isMenuOpen}
           aria-label="Open wallet profile"
         >
-          <span className="h-8 w-8 rounded-full border border-white/20 bg-[radial-gradient(circle_at_30%_20%,#ffe0c6_0,#50d1ff_42%,#083344_100%)]" />
-          <span className="hidden text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100 min-[420px]:inline">
-            {shortAddress}
+          <span className="h-7 w-7 rounded-full border border-white/20 bg-[radial-gradient(circle_at_30%_20%,#ffe0c6_0,#50d1ff_42%,#083344_100%)]" />
+          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-emerald-100">
+            {tinyAddress}
           </span>
           <span className={`text-xs text-slate-300 transition ${isMenuOpen ? 'rotate-180' : ''}`}>v</span>
         </button>

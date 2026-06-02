@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BuyWidget, SwapWidget } from 'thirdweb/react';
 import { ASSETS, DONATION_CONFIG } from '../constants';
 import {
@@ -17,6 +17,7 @@ export type FundingCreditToken = 'RSC' | 'KRMA';
 interface FundingWidgetModalProps {
   mode: FundingWidgetMode;
   rscAmount?: number;
+  initialCreditToken?: FundingCreditToken;
   walletAddress?: string | null;
   onClose: () => void;
   onModeChange: (mode: FundingWidgetMode, rscAmount?: number) => void;
@@ -71,6 +72,7 @@ const creditTokenMeta: Record<FundingCreditToken, {
 const FundingWidgetModal: React.FC<FundingWidgetModalProps> = ({
   mode,
   rscAmount = DONATION_CONFIG.PRESET_RSC_AMOUNTS[0],
+  initialCreditToken = 'RSC',
   walletAddress,
   onClose,
   onModeChange,
@@ -81,9 +83,13 @@ const FundingWidgetModal: React.FC<FundingWidgetModalProps> = ({
   const [widgetMessage, setWidgetMessage] = useState('');
   const [confirmedTxHash, setConfirmedTxHash] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
-  const [selectedCreditToken, setSelectedCreditToken] = useState<FundingCreditToken>('RSC');
+  const [selectedCreditToken, setSelectedCreditToken] = useState<FundingCreditToken>(initialCreditToken);
   const creditToken = creditTokenMeta[selectedCreditToken];
   const missionCredits = selectedRscAmount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC;
+
+  useEffect(() => {
+    setSelectedCreditToken(initialCreditToken);
+  }, [initialCreditToken]);
 
   const updateMode = (nextMode: FundingWidgetMode) => {
     setWidgetMessage('');

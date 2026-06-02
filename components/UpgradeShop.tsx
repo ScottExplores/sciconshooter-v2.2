@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DonationStatus, PowerupType, Stats, Upgrades, WalletSession } from '../types';
 import { ASSETS, DONATION_CONFIG, UPGRADE_BASE_COSTS } from '../constants';
+import type { FundingCreditToken } from './FundingWidgetModal';
 
 interface UpgradeShopProps {
   stats: Stats;
@@ -10,8 +11,9 @@ interface UpgradeShopProps {
   onBuyPowerup: (type: PowerupType) => void;
   onClose: () => void;
   onConnectWallet: (connectorId?: string) => void;
-  onBuyMissionCredits: (rscAmount: number) => void;
+  onBuyMissionCredits: (rscAmount: number, token?: FundingCreditToken) => void;
   onOpenRscSwap: () => void;
+  onOpenKarmaSwap: () => void | Promise<void>;
   onClaimProfileCredits: () => void;
   labFundingStatus: DonationStatus;
   labFundingHash: string;
@@ -80,13 +82,39 @@ const purchasablePowerups: FounderPowerupType[] = [
   PowerupType.SHIELD
 ];
 
-const statusText: Record<DonationStatus, string> = {
-  idle: 'Confirmed token transfers save wallet-linked credits.',
-  switching_network: 'Switching to Base...',
-  processing: 'Confirm the token transfer in your wallet.',
-  confirming: 'Waiting for Base confirmation...',
-  success: 'Credits added.',
-  error: ''
+const labFundingTokens: Record<FundingCreditToken, {
+  label: string;
+  symbol: string;
+  chain: string;
+  icon: string;
+}> = {
+  RSC: {
+    label: 'Use RSC',
+    symbol: 'RSC',
+    chain: 'Base',
+    icon: ASSETS.REAL_RSC_ICON
+  },
+  KRMA: {
+    label: 'Use KARMA',
+    symbol: 'KRMA',
+    chain: 'BNB Smart Chain',
+    icon: ASSETS.KARMA_TOKEN
+  }
+};
+
+const getStatusText = (status: DonationStatus, token: FundingCreditToken) => {
+  const tokenMeta = labFundingTokens[token];
+
+  const statusText: Record<DonationStatus, string> = {
+    idle: 'Confirmed token transfers save wallet-linked credits.',
+    switching_network: `Switching to ${tokenMeta.chain}...`,
+    processing: 'Confirm the token transfer in your wallet.',
+    confirming: `Waiting for ${tokenMeta.chain} confirmation...`,
+    success: 'Credits added to your wallet bank.',
+    error: ''
+  };
+
+  return statusText[status];
 };
 
 const UpgradeShop: React.FC<UpgradeShopProps> = ({
@@ -99,6 +127,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   onConnectWallet,
   onBuyMissionCredits,
   onOpenRscSwap,
+  onOpenKarmaSwap,
   onClaimProfileCredits,
   labFundingStatus,
   labFundingHash,
@@ -108,6 +137,8 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
 }) => {
   const [promoCode, setPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [selectedFundingToken, setSelectedFundingToken] = useState<FundingCreditToken>('RSC');
+  const selectedTokenMeta = labFundingTokens[selectedFundingToken];
 
   const getCost = (type: keyof Upgrades) => {
     const level = stats.upgrades[type];
@@ -160,6 +191,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   const canBuyAnyUpgrade = (Object.keys(upgradeCopy) as Array<keyof Upgrades>).some((type) => stats.coins >= getCost(type) && stats.upgrades[type] < 5)
     || stats.coins >= getRepairCost()
     || purchasablePowerups.some((type) => stats.coins >= getPowerupCost(type));
+  const txExplorerLabel = labFundingExplorerBaseUrl.toLowerCase().includes('bsc') ? 'BscScan' : 'BaseScan';
 
   return (
     <div className="absolute inset-0 z-30 bg-black/82 backdrop-blur-md">
@@ -175,11 +207,27 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-200/75">Fund. Upgrade. Return.</p>
                 </div>
 
-                <div className={`rounded-2xl border px-3 py-2 ${canBuyAnyUpgrade ? 'border-yellow-300/40 bg-yellow-300/10' : 'border-cyan-300/20 bg-cyan-950/25'}`}>
-                  <span className="block text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Credits</span>
+                <div className={`min-w-[138px] rounded-2xl border px-3 py-2 ${canBuyAnyUpgrade ? 'border-yellow-300/40 bg-yellow-300/10' : 'border-cyan-300/20 bg-cyan-950/25'}`}>
+                  <span className="block text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Mission Credits</span>
                   <div className="mt-1 flex items-center gap-2">
-                    <img src={ASSETS.RSC_TOKEN} className="h-5 w-5" alt="RSC" />
+                    <img src={ASSETS.RSC_TOKEN} className="h-5 w-5" alt="Credits" />
                     <span className="font-mono text-2xl font-bold text-white">{stats.coins}</span>
+                  </div>
+                  <div className="mt-2 rounded-xl border border-white/10 bg-black/28 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-mono text-[8px] font-black uppercase tracking-[0.14em] text-yellow-100/80">Wallet Bank</div>
+                        <div className="mt-0.5 text-[11px] font-bold text-white">{stats.profileCredits || 0} ready</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onClaimProfileCredits}
+                        disabled={(stats.profileCredits || 0) <= 0}
+                        className="rounded-lg border border-yellow-100/40 bg-yellow-200 px-2 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
+                      >
+                        Deploy
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -286,6 +334,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   <div>
                     <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-200">RSC Funding</div>
                     <h3 className="mt-1 text-sm font-bold uppercase tracking-wide text-white">Mission credits</h3>
+                    <p className="mt-1 text-xs text-slate-400">Buy wallet-linked credits, then deploy them into this run above.</p>
                   </div>
 
                   {wallet.address ? (
@@ -295,6 +344,42 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     </div>
                   ) : null}
                 </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {(['RSC', 'KRMA'] as FundingCreditToken[]).map((token) => {
+                    const tokenMeta = labFundingTokens[token];
+                    const isSelected = selectedFundingToken === token;
+
+                    return (
+                      <button
+                        key={token}
+                        type="button"
+                        onClick={() => setSelectedFundingToken(token)}
+                        className={`rounded-2xl border px-3 py-2.5 text-left transition active:scale-95 ${
+                          isSelected
+                            ? token === 'KRMA'
+                              ? 'border-purple-100 bg-purple-300/22 text-white shadow-[0_0_22px_rgba(168,85,247,0.16)]'
+                              : 'border-emerald-100 bg-emerald-300/18 text-white shadow-[0_0_22px_rgba(16,185,129,0.16)]'
+                            : 'border-white/10 bg-black/28 text-slate-300 hover:border-cyan-200/45'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img src={tokenMeta.icon} alt="" className={`h-7 w-7 rounded-full border object-cover ${token === 'RSC' ? 'border-white/10 bg-white' : 'border-purple-200/35 bg-slate-950'}`} />
+                          <div>
+                            <div className="font-mono text-[9px] font-black uppercase tracking-[0.14em]">{tokenMeta.label}</div>
+                            <div className="mt-0.5 text-[9px] font-semibold text-slate-400">{tokenMeta.chain}</div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedFundingToken === 'KRMA' ? (
+                  <div className="mt-2 rounded-2xl border border-purple-200/20 bg-purple-400/10 p-3 text-[11px] font-semibold leading-relaxed text-purple-100">
+                    Promo mode: KARMA runs on BNB Smart Chain. 1 KRMA gives the same 100 wallet-bank credits as 1 RSC.
+                  </div>
+                ) : null}
 
                 {!wallet.address ? (
                   <div className="mt-3 rounded-2xl border border-cyan-300/15 bg-black/30 p-2">
@@ -309,39 +394,19 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                   </div>
                 ) : null}
 
-                {stats.profileCredits > 0 ? (
-                  <div className="mt-3 rounded-2xl border border-yellow-200/25 bg-yellow-200/10 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-[9px] font-black uppercase tracking-[0.14em] text-yellow-100">Profile bank</div>
-                        <div className="mt-1 text-xs text-slate-300">
-                          {stats.profileCredits} wallet-linked credits ready for this mission.
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onClaimProfileCredits}
-                        className="rounded-xl border border-yellow-100/40 bg-yellow-200 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-950 transition hover:bg-white"
-                      >
-                        Deploy
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {fundingPackages.map((fundingPackage) => (
                     <button
                       key={fundingPackage.rsc}
                       onClick={() => {
                         if (wallet.address) {
-                          onBuyMissionCredits(fundingPackage.rsc);
+                          onBuyMissionCredits(fundingPackage.rsc, selectedFundingToken);
                         }
                       }}
                       disabled={!wallet.address || isFundingBusy}
                       className="rounded-2xl border border-emerald-300/20 bg-black/38 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-300/10 disabled:cursor-wait disabled:opacity-60"
                     >
-                      <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-200">{fundingPackage.rsc} RSC</div>
+                      <div className={`font-mono text-[9px] font-bold uppercase tracking-[0.14em] ${selectedFundingToken === 'KRMA' ? 'text-purple-200' : 'text-emerald-200'}`}>{fundingPackage.rsc} {selectedTokenMeta.symbol}</div>
                       <div className="mt-1 text-lg font-black text-white">{fundingPackage.credits}</div>
                       <div className="mt-1 text-[9px] uppercase tracking-[0.12em] text-slate-400">credits</div>
                     </button>
@@ -350,10 +415,17 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
 
                 <button
                   type="button"
-                  onClick={onOpenRscSwap}
+                  onClick={() => {
+                    if (selectedFundingToken === 'KRMA') {
+                      onOpenKarmaSwap();
+                      return;
+                    }
+
+                    onOpenRscSwap();
+                  }}
                   className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-300/10"
                 >
-                  Need RSC? Buy ResearchCoin
+                  {selectedFundingToken === 'KRMA' ? 'Need KARMA? Open PancakeSwap' : 'Need RSC? Buy ResearchCoin'}
                 </button>
 
                 <div className="mt-3 min-h-5 font-mono text-[10px] uppercase tracking-[0.14em]">
@@ -361,7 +433,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     <span className="text-red-300">{labFundingError}</span>
                   ) : (
                     <span className={labFundingStatus === 'success' ? 'text-emerald-200' : 'text-slate-400'}>
-                      {statusText[labFundingStatus]}
+                      {getStatusText(labFundingStatus, selectedFundingToken)}
                     </span>
                   )}
                 </div>
@@ -373,7 +445,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     rel="noopener noreferrer"
                     className="mt-2 inline-block font-mono text-[10px] uppercase tracking-[0.16em] text-cyan-300 underline underline-offset-2 hover:text-white"
                   >
-                    View tx on BaseScan
+                    View tx on {txExplorerLabel}
                   </a>
                 ) : null}
 

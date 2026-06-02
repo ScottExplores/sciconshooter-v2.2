@@ -17,6 +17,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
   const requestRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const handledPowerupNonceRef = useRef<number | null>(null);
+  const activeTouchIdRef = useRef<number | null>(null);
   
   // Use a ref to track gameState inside the animation loop closure
   const gameStateRef = useRef(gameState);
@@ -100,22 +101,64 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
       keys[e.key] = false; 
     };
     
+    const updateTouchTarget = (touch: Touch) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
+      engine.handleInput(keys, { x, y });
+    };
+
+    const findTrackedTouch = (touches: TouchList) => {
+      if (activeTouchIdRef.current === null) return touches[0] || null;
+
+      for (let index = 0; index < touches.length; index += 1) {
+        if (touches[index].identifier === activeTouchIdRef.current) {
+          return touches[index];
+        }
+      }
+
+      return null;
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      const touch = e.changedTouches[0] || e.touches[0];
+      if (!touch) return;
+
+      activeTouchIdRef.current = touch.identifier;
+      updateTouchTarget(touch);
+    };
+
     const handleTouchMove = (e: TouchEvent) => {
-       e.preventDefault(); 
-       const touch = e.touches[0];
-       const rect = canvas.getBoundingClientRect();
-       engine.handleInput(keys, { x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+      const touch = findTrackedTouch(e.touches);
+      if (!touch) return;
+
+      if (e.cancelable) e.preventDefault();
+      updateTouchTarget(touch);
     };
     
     const handleTouchEnd = () => {
-       engine.handleInput(keys, null);
+      activeTouchIdRef.current = null;
+      engine.handleInput(keys, null);
+    };
+
+    const handleTouchCancel = () => {
+      activeTouchIdRef.current = null;
+      engine.handleInput(keys, null);
+    };
+
+    const handleWindowBlur = () => {
+      activeTouchIdRef.current = null;
+      engine.handleInput(keys, null);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchstart', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchCancel);
+    window.addEventListener('blur', handleWindowBlur);
 
     // FPS Control
     const targetFPS = 60;
@@ -165,9 +208,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchstart', handleTouchMove);
-      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchCancel);
+      window.removeEventListener('blur', handleWindowBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
@@ -176,6 +221,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ setStats, setGameState, stats, 
     <canvas 
       ref={canvasRef} 
       className="absolute left-0 top-0 z-0 block h-full w-full"
+      style={{ touchAction: 'none' }}
     />
   );
 };
