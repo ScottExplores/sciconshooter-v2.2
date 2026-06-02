@@ -660,18 +660,20 @@ const App: React.FC = () => {
     setLabFundingError(message || 'Payment flow could not complete.');
   };
 
-  const handleClaimProfileCredits = () => {
+  const handleClaimProfileCredits = (amount: number) => {
     setStats(prev => {
       const profileCredits = prev.profileCredits || 0;
-      if (profileCredits <= 0) {
+      const creditsToDeploy = Math.max(0, Math.min(profileCredits, Math.floor(amount || 0)));
+
+      if (creditsToDeploy <= 0) {
         return prev;
       }
 
       audioService.playSound('coin');
       return {
         ...prev,
-        coins: prev.coins + profileCredits,
-        profileCredits: 0
+        coins: prev.coins + creditsToDeploy,
+        profileCredits: profileCredits - creditsToDeploy
       };
     });
   };

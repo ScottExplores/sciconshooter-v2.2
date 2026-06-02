@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DonationStatus, PowerupType, Stats, Upgrades, WalletSession } from '../types';
 import { ASSETS, DONATION_CONFIG, UPGRADE_BASE_COSTS } from '../constants';
 import type { FundingCreditToken } from './FundingWidgetModal';
@@ -14,7 +14,7 @@ interface UpgradeShopProps {
   onBuyMissionCredits: (rscAmount: number, token?: FundingCreditToken) => void;
   onOpenRscSwap: () => void;
   onOpenKarmaSwap: () => void | Promise<void>;
-  onClaimProfileCredits: () => void;
+  onClaimProfileCredits: (amount: number) => void;
   labFundingStatus: DonationStatus;
   labFundingHash: string;
   labFundingExplorerBaseUrl: string;
@@ -138,7 +138,23 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   const [promoCode, setPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [selectedFundingToken, setSelectedFundingToken] = useState<FundingCreditToken>('RSC');
+  const [deployAmountInput, setDeployAmountInput] = useState('');
   const selectedTokenMeta = labFundingTokens[selectedFundingToken];
+  const profileCredits = stats.profileCredits || 0;
+  const deployAmount = Math.max(0, Math.min(profileCredits, Math.floor(Number(deployAmountInput) || 0)));
+
+  useEffect(() => {
+    if (profileCredits <= 0) {
+      setDeployAmountInput('');
+      return;
+    }
+
+    setDeployAmountInput((current) => {
+      const currentAmount = Math.floor(Number(current) || 0);
+      if (currentAmount > 0 && currentAmount <= profileCredits) return current;
+      return String(profileCredits);
+    });
+  }, [profileCredits]);
 
   const getCost = (type: keyof Upgrades) => {
     const level = stats.upgrades[type];
@@ -217,17 +233,45 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-mono text-[8px] font-black uppercase tracking-[0.14em] text-yellow-100/80">Wallet Bank</div>
-                        <div className="mt-0.5 text-[11px] font-bold text-white">{stats.profileCredits || 0} ready</div>
+                        <div className="mt-0.5 text-[11px] font-bold text-white">{profileCredits} ready</div>
                       </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={profileCredits}
+                        step={1}
+                        value={deployAmountInput}
+                        onChange={(event) => setDeployAmountInput(event.target.value)}
+                        disabled={profileCredits <= 0}
+                        aria-label="Credits to deploy"
+                        className="min-w-0 flex-1 rounded-lg border border-yellow-100/20 bg-black/35 px-2 py-1.5 text-right font-mono text-[11px] font-black text-yellow-50 outline-none focus:border-yellow-100/70 disabled:text-slate-500"
+                      />
                       <button
                         type="button"
-                        onClick={onClaimProfileCredits}
-                        disabled={(stats.profileCredits || 0) <= 0}
+                        onClick={() => onClaimProfileCredits(deployAmount)}
+                        disabled={deployAmount <= 0}
                         className="rounded-lg border border-yellow-100/40 bg-yellow-200 px-2 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
                       >
                         Deploy
                       </button>
                     </div>
+                    {profileCredits > 0 ? (
+                      <div className="mt-1 flex items-center justify-end gap-1.5">
+                        {[100, profileCredits].filter((amount, index, list) => amount > 0 && amount <= profileCredits && list.indexOf(amount) === index).map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setDeployAmountInput(String(amount))}
+                            className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[7px] font-black uppercase tracking-[0.08em] text-yellow-100/80 transition hover:border-yellow-100/50"
+                          >
+                            {amount === profileCredits ? 'All' : amount}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

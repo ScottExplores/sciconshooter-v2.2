@@ -387,7 +387,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
       </div>
 
       <div className="relative z-10 mx-auto flex h-[100dvh] w-full max-w-6xl touch-pan-y flex-col gap-3 overflow-y-auto px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-14 custom-scrollbar sm:px-4 sm:pb-4 md:pt-4">
-        <div className="flex min-h-[260px] shrink-0 flex-col gap-3 overflow-visible rounded-[26px] border border-white/10 bg-slate-950/72 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:min-h-[250px] sm:p-4 lg:min-h-[180px]">
+        <div className="relative z-30 flex min-h-[260px] shrink-0 flex-col gap-3 overflow-visible rounded-[26px] border border-white/10 bg-slate-950/72 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:min-h-[250px] sm:p-4 lg:min-h-[180px]">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="scicon-logo-lockup" aria-label="SCICON SHOOTER">
@@ -398,7 +398,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-2 min-[420px]:grid-cols-[minmax(0,1fr)_148px] sm:grid-cols-[minmax(0,1fr)_190px] sm:gap-3 lg:grid-cols-[1fr_260px]">
+          <div className="grid grid-cols-[minmax(0,1fr)_148px] gap-2 min-[420px]:grid-cols-[minmax(0,1fr)_160px] sm:grid-cols-[minmax(0,1fr)_190px] sm:gap-3 lg:grid-cols-[1fr_260px]">
             <button
               onClick={onStart}
               className="group flex min-h-[74px] items-center justify-between rounded-[22px] border border-blue-300/25 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-left shadow-[0_20px_46px_rgba(37,99,235,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_56px_rgba(37,99,235,0.44)]"
@@ -412,7 +412,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </button>
 
-            <div className="relative rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-2.5 sm:p-4">
+            <div className="relative z-40 overflow-visible rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-2.5 sm:p-4">
               <div className="flex items-start justify-between gap-1.5">
                 <div className="max-w-[86px] text-[8px] font-black uppercase leading-tight tracking-[0.16em] text-yellow-100/80 min-[420px]:max-w-none min-[420px]:text-[9px] sm:text-[10px] sm:tracking-[0.22em]">Weekly Allocation</div>
                 <button
@@ -425,7 +425,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   i
                 </button>
               </div>
-              <div className="relative mt-2 min-h-[66px] overflow-hidden">
+              <div className="relative mt-2 min-h-[76px] overflow-hidden">
                 <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? '-translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
                   <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{weeklyAllocation.daysLeft}</div>
                   <div className="pb-1 text-right text-[9px] font-semibold uppercase leading-tight tracking-wide text-slate-300 sm:text-xs">
@@ -436,12 +436,14 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   <div>
                     <div className="arcade-font text-2xl font-black leading-none text-white min-[420px]:text-3xl sm:text-4xl">{weeklyAllocation.allocationRsc}</div>
                     <div className="mt-1 text-[11px] font-black uppercase leading-none tracking-[0.18em] text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.45)] sm:text-[13px] sm:tracking-[0.24em]">RSC</div>
-                    <div className="mt-1 text-[6px] font-black uppercase leading-tight tracking-[0.14em] text-slate-300 sm:text-[7px] sm:tracking-[0.18em]">funding credits</div>
+                    <div className="mt-1 text-[8px] font-black uppercase leading-[0.95] tracking-[0.13em] text-emerald-50 sm:text-[9px] sm:tracking-[0.16em]">
+                      Funding<br />Credits
+                    </div>
                   </div>
                 </div>
               </div>
               {showAllocationInfo ? (
-                <div className="absolute right-0 top-11 z-30 w-[min(232px,calc(100vw-1.5rem))] rounded-2xl border border-yellow-100/35 bg-[#020617] p-3 text-xs font-semibold leading-relaxed text-slate-100 shadow-[0_18px_55px_rgba(0,0,0,0.75)] ring-1 ring-black/80">
+                <div className="absolute right-0 top-11 z-[200] w-[min(246px,calc(100vw-1.5rem))] rounded-2xl border border-yellow-100/35 bg-[#020617] p-3 text-xs font-semibold leading-relaxed text-slate-100 shadow-[0_18px_55px_rgba(0,0,0,0.8)] ring-1 ring-black/80">
                   The weekly No. 1 pilot chooses the ResearchHub proposal pick for the 100 RSC funding-credit signal.
                 </div>
               ) : null}
@@ -449,7 +451,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
           </div>
         </div>
 
-        <main className="grid shrink-0 gap-3 lg:grid-cols-[0.92fr_1.08fr]">
+        <main className="relative z-0 grid shrink-0 gap-3 lg:grid-cols-[0.92fr_1.08fr]">
           <section className="self-start rounded-[26px] border border-white/10 bg-slate-950/70 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>

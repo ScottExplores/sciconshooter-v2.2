@@ -32,7 +32,7 @@ const WalletButton: React.FC<WalletButtonProps> = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const shortAddress = wallet.address ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : '';
-  const tinyAddress = wallet.address ? `...${wallet.address.slice(-4)}` : '';
+  const tinyAddress = wallet.address ? wallet.address.slice(-4) : '';
   const actionIconClass = 'grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-200/18 bg-cyan-300/10 text-cyan-100 shadow-[inset_0_0_18px_rgba(34,211,238,0.08)]';
 
   if (thirdwebClient && wallet.address) {
