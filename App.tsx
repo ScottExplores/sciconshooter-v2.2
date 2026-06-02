@@ -942,6 +942,50 @@ const App: React.FC = () => {
   const sharePrompt = scoreQualification.isMonthlyChampion && selectedShareProposal
     ? 'Share your No. 1 run and proposal pick.'
     : 'Share your score and invite pilots to chase the funding-credit board.';
+  const highScoreActionControls = (
+    <div className="sticky top-0 z-20 rounded-2xl border border-white/10 bg-slate-950/92 p-3 shadow-[0_16px_46px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      {scoreSubmitError ? (
+        <p className="mb-3 rounded-xl border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-[11px] font-semibold leading-relaxed text-red-100">
+          {scoreSubmitError}
+        </p>
+      ) : null}
+
+      <div className="grid gap-2">
+        <button
+          type="button"
+          onClick={shareHighScore}
+          disabled={!playerNameInput || isSubmittingScore || (scoreQualification.isMonthlyChampion && fundingProposals.length > 0 && !selectedShareProposal)}
+          className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-100 transition hover:border-sky-300/50 hover:bg-sky-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Save & Share on X
+        </button>
+        <button
+          type="submit"
+          disabled={!playerNameInput || isSubmittingScore}
+          className={`scicon-btn w-full py-3 text-lg font-bold ${isSubmittingScore ? 'cursor-wait opacity-70' : ''}`}
+        >
+          {isSubmittingScore ? 'TRANSMITTING...' : 'SUBMIT RECORD'}
+        </button>
+        <button
+          type="button"
+          onClick={skipScoreSubmission}
+          disabled={isSubmittingScore}
+          className="w-full rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 transition hover:border-red-200/45 hover:bg-red-300/10 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Do Not Submit Score
+        </button>
+      </div>
+
+      <p className="mt-2 text-center text-[10px] font-semibold leading-relaxed text-slate-500">
+        {sharePrompt} Your score saves before X opens.
+      </p>
+      {canSelectFundingProposal ? (
+        <p className="mt-1 text-center text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
+          Champion funding pick is below.
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="relative h-full w-full select-none bg-[#0b1020]">
@@ -1110,6 +1154,8 @@ const App: React.FC = () => {
                       disabled={isSubmittingScore}
                     />
 
+                    {highScoreActionControls}
+
                     {canSelectFundingProposal ? (
                       <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
                         <div className="mb-2">
@@ -1180,42 +1226,9 @@ const App: React.FC = () => {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center text-[11px] font-semibold leading-relaxed text-slate-400">
                         {scoreQualification.qualifiesAllTimeTop25 && !scoreQualification.qualifiesMonthlyTop5
                           ? 'This score lands on the all-time board. Try again before week-end for weekly No. 1 and the champion proposal pick.'
-                          : 'Proposal selection unlocks only for the weekly No. 1 pilot. This score still submits to each leaderboard it qualifies for.'}
+                        : 'Proposal selection unlocks only for the weekly No. 1 pilot. This score still submits to each leaderboard it qualifies for.'}
                       </div>
                     )}
-
-                    {scoreSubmitError ? (
-                      <p className="rounded-2xl border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-[11px] font-semibold leading-relaxed text-red-100">
-                        {scoreSubmitError}
-                      </p>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={shareHighScore}
-                      disabled={!playerNameInput || isSubmittingScore || (scoreQualification.isMonthlyChampion && fundingProposals.length > 0 && !selectedShareProposal)}
-                      className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-100 transition hover:border-sky-300/50 hover:bg-sky-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Save & Share on X
-                    </button>
-                    <p className="-mt-2 text-center text-[10px] font-semibold leading-relaxed text-slate-500">
-                      {sharePrompt} Your score saves before X opens.
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={!playerNameInput || isSubmittingScore}
-                      className={`scicon-btn w-full py-3 text-lg font-bold ${isSubmittingScore ? 'cursor-wait opacity-70' : ''}`}
-                    >
-                      {isSubmittingScore ? 'TRANSMITTING...' : 'SUBMIT RECORD'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={skipScoreSubmission}
-                      disabled={isSubmittingScore}
-                      className="w-full rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 transition hover:border-red-200/45 hover:bg-red-300/10 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Do Not Submit Score
-                    </button>
                   </form>
                 </div>
               ) : (

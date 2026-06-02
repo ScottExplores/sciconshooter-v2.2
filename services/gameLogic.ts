@@ -250,6 +250,7 @@ export class GameEngine {
   bossWarningFrame: number = 0;
   bossWarningDuration: number = 0;
   pendingBossType: BossWarningType | null = null;
+  waveTransitionPending: boolean = false;
   missileTimer: number = 0;
   
   constructor(stats: Stats) {
@@ -426,6 +427,7 @@ export class GameEngine {
     this.inBossWarningSequence = false;
     this.bossWarningDuration = 0;
     this.pendingBossType = null;
+    this.waveTransitionPending = false;
   }
 
   getPlayerMovementBounds() {
@@ -438,6 +440,10 @@ export class GameEngine {
   }
 
   startNextWave() {
+    if (this.waveTransitionPending === false && this.mainBossDefeated === false) {
+      return;
+    }
+
     this.wave++;
     this.stats.wave++;
     this.resetWaveProgress();
@@ -521,7 +527,7 @@ export class GameEngine {
             maxHp = this.miniBossRef.maxHp;
         } else if (invaderCount > 0) {
             hp = invaderCount; 
-            maxHp = 12; // 2 rows * 6 cols = 12
+            maxHp = this.wave === 1 ? 10 : 12;
         } else if (asteroidBeltCount > 0) {
             hp = asteroidBeltCount;
             maxHp = this.asteroidBeltMaxCount || asteroidBeltCount;
@@ -858,34 +864,56 @@ export class GameEngine {
 
     if (target.type === EntityType.MINI_BOSS) {
       this.stats.score += 500 * waveMult;
-      if (this.stats.wave === 1) {
-        for (let i = 0; i < 4; i++) {
-          this.spawnCoin(target.x + Math.random() * target.width, target.y + Math.random() * target.height);
-        }
+      const miniBossCoinDrops = 4 + Math.min(8, this.stats.wave * 2);
+      for (let i = 0; i < miniBossCoinDrops; i++) {
+        this.spawnCoin(target.x + Math.random() * target.width, target.y + Math.random() * target.height);
       }
-      this.spawnPowerup(target.x, target.y);
+      const miniBossPowerupDrops = this.stats.wave >= 2 ? 2 : 1;
+      for (let i = 0; i < miniBossPowerupDrops; i++) {
+        this.spawnPowerup(
+          target.x + (target.width * ((i + 1) / (miniBossPowerupDrops + 1))),
+          target.y + Math.random() * target.height
+        );
+      }
       this.miniBossRef = null;
       this.waveProgressFrames += 120;
     }
 
     if (target.type === EntityType.BOSS) {
+      if (this.waveTransitionPending) return;
+
       this.stats.score += 1000 * waveMult;
+      const completedWave = this.wave;
       this.bossRef = null;
       this.mainBossDefeated = true;
+      this.waveTransitionPending = true;
       this.inBossWarningSequence = false;
       this.pendingBossType = null;
       this.bossWarningFrame = 0;
-      for (let i = 0; i < 8; i++) {
+      const bossCoinDrops = 7 + Math.min(11, this.stats.wave * 3);
+      for (let i = 0; i < bossCoinDrops; i++) {
         this.spawnCoin(target.x + Math.random() * target.width, target.y + Math.random() * target.height);
       }
-      this.spawnPowerup(target.x + 50, target.y + 50);
-      this.spawnPowerup(target.x + 100, target.y + 100);
+      const bossPowerupDrops = 2 + Math.min(2, Math.floor(this.stats.wave / 2));
+      for (let i = 0; i < bossPowerupDrops; i++) {
+        this.spawnPowerup(
+          target.x + (target.width * ((i + 1) / (bossPowerupDrops + 1))),
+          target.y + 50 + Math.random() * Math.max(30, target.height - 70)
+        );
+      }
 
       audioService.playSound('electricity');
 
       this.spawnFloatingText(this.width / 2, this.height / 2, "WAVE COMPLETE!", "#00FF00");
       setTimeout(() => {
-        this.startNextWave();
+        if (
+          this.gameActive
+          && this.waveTransitionPending
+          && this.mainBossDefeated
+          && this.wave === completedWave
+        ) {
+          this.startNextWave();
+        }
       }, 2000);
     }
   }
@@ -1015,7 +1043,7 @@ export class GameEngine {
     const mb = new Entity(EntityType.MINI_BOSS, this.width/2 - 50, -100);
     mb.width = 140;
     mb.height = 160;
-    mb.hp = this.wave === 1 ? 52 : 45 + (this.wave * 25);
+    mb.hp = this.wave === 1 ? 44 : 45 + (this.wave * 22);
     mb.maxHp = mb.hp;
     mb.vy = 2;
     mb.color = '#fb7185';
@@ -1025,7 +1053,7 @@ export class GameEngine {
   
   spawnWallBoss() {
     const rows = 2; // UPDATED to 2 rows
-    const cols = 6; 
+    const cols = this.wave === 1 ? 5 : 6;
     const isMobile = this.width < 600;
     const blockW = isMobile ? 42 : 52;
     const blockH = isMobile ? 50 : 60;
@@ -1037,7 +1065,7 @@ export class GameEngine {
             const e = new Entity(EntityType.ENEMY_INVADER, startX + c*(blockW+gap), -200 + r*(blockH+gap));
             e.width = blockW;
             e.height = blockH;
-            e.hp = Math.round(5 + (this.wave * 3.25));
+            e.hp = this.wave === 1 ? 5 : Math.round(5 + (this.wave * 3.1));
             e.maxHp = e.hp;
             e.color = '#fb7185'; 
             e.text = "🧱"; // UPDATED to Brick Emoji
@@ -1087,8 +1115,7 @@ export class GameEngine {
       invaders.forEach(inv => { if (inv.y < minY) minY = inv.y; });
 
       const isEntering = minY < 50;
-      // SLOWER ENTRY FOR WAVE 1: 1.5 speed base
-      const verticalSpeed = isEntering ? (1.5 + (this.wave - 1)) : 0; 
+      const verticalSpeed = isEntering ? (this.wave === 1 ? 1.15 : 1.5 + (this.wave - 1)) : 0;
       
       let hitEdge = false;
       invaders.forEach(inv => {
@@ -1096,7 +1123,7 @@ export class GameEngine {
           if (inv.x < 10 && this.invaderDirection < 0) hitEdge = true;
       });
       
-      let moveX = this.invaderDirection * (2 + (this.wave * 0.3));
+      let moveX = this.invaderDirection * (this.wave === 1 ? 1.55 : 2 + (this.wave * 0.3));
       let moveY = verticalSpeed;
 
       if (hitEdge && !isEntering) {
@@ -1110,14 +1137,14 @@ export class GameEngine {
           inv.y += moveY;
       });
       
-      const shootRate = Math.max(8, 20 - this.wave);
+      const shootRate = this.wave === 1 ? 42 : Math.max(8, 20 - this.wave);
       if (this.frameCount % shootRate === 0) { 
           const shooter = invaders[Math.floor(Math.random() * invaders.length)];
           const b = new Entity(EntityType.PROJECTILE, shooter.x + shooter.width/2, shooter.y + shooter.height);
           b.vx = 0;
-          b.vy = 7 + (this.wave * 0.5);
-          b.width = 14; 
-          b.height = 14; 
+          b.vy = this.wave === 1 ? 5.4 : 7 + (this.wave * 0.5);
+          b.width = this.wave === 1 ? 12 : 14;
+          b.height = this.wave === 1 ? 12 : 14;
           b.color = '#ff4444';
           // Solid projectile
           this.entities.push(b);
@@ -1138,7 +1165,7 @@ export class GameEngine {
      
      boss.x = Math.max(0, Math.min(this.width - boss.width, boss.x));
      
-     const shootRate = Math.max(30, 60 - (this.wave * 5));
+     const shootRate = this.wave === 1 ? 72 : Math.max(30, 60 - (this.wave * 5));
      if (boss.attackTimer % shootRate === 0) {
         const b = new Entity(EntityType.PROJECTILE, boss.x + boss.width/2, boss.y + boss.height);
         b.vx = 0;
