@@ -16,7 +16,7 @@ import UpgradeShop from './components/UpgradeShop';
 import Tutorial from './components/Tutorial';
 import SupportPanel from './components/SupportPanel';
 import WalletButton from './components/WalletButton';
-import FundingWidgetModal, { FundingWidgetMode } from './components/FundingWidgetModal';
+import FundingWidgetModal, { FundingCreditToken, FundingWidgetMode } from './components/FundingWidgetModal';
 import StoryTransmission from './components/StoryTransmission';
 import UpgradeCoach from './components/UpgradeCoach';
 import { DonationStatus, GameState, LeaderboardEntry, MiniAppState, PowerupType, Stats, Upgrades, WalletSession } from './types';
@@ -29,6 +29,7 @@ import { getStoryBeatForPhase, StoryBeat } from './services/storyBeats';
 import {
   thirdwebAppMetadata,
   thirdwebBaseChain,
+  thirdwebBscChain,
   thirdwebClient,
   thirdwebConnectModal,
   thirdwebRecommendedWallets,
@@ -57,7 +58,8 @@ const defaultPowerupUses: Record<PowerupType, number> = {
   [PowerupType.TRIPLE_SHOT]: 0,
   [PowerupType.MAGNET]: 0,
   [PowerupType.SHIELD]: 0,
-  [PowerupType.EXTRA_LIFE]: 0
+  [PowerupType.EXTRA_LIFE]: 0,
+  [PowerupType.KARMA_LASER]: 0
 };
 
 const purchasablePowerups = [
@@ -142,13 +144,13 @@ const buildHighScoreShareUrl = ({
     ? `${selectedProposal.title.slice(0, 83)}...`
     : selectedProposal?.title;
   const rankParts = [
-    monthlyRank ? `Monthly #${monthlyRank}` : '',
+    monthlyRank ? `Weekly #${monthlyRank}` : '',
     allTimeRank ? `All-Time #${allTimeRank}` : ''
   ].filter(Boolean);
   const scoreLine = `I scored ${score.toLocaleString()} in SciCon Shooter${rankParts.length ? ` (${rankParts.join(' / ')})` : ''}.`;
   const missionLine = isMonthlyChampion && compactProposalTitle
-    ? `I picked "${compactProposalTitle}" for the 500 RSC funding-credit allocation.`
-    : 'Trying to climb the leaderboard and win monthly RSC funding credits for science.';
+    ? `I picked "${compactProposalTitle}" for the 100 RSC weekly funding-credit allocation.`
+    : 'Trying to climb the leaderboard and win weekly RSC funding credits for science.';
   const playLine = `Play here: ${DONATION_CONFIG.GAME_URL}`;
   const shareUrl = isMonthlyChampion && selectedProposal?.url
     ? selectedProposal.url
@@ -180,6 +182,7 @@ const App: React.FC = () => {
   const [walletError, setWalletError] = useState<string>('');
   const [labFundingStatus, setLabFundingStatus] = useState<DonationStatus>('idle');
   const [labFundingHash, setLabFundingHash] = useState<string>('');
+  const [labFundingExplorerBaseUrl, setLabFundingExplorerBaseUrl] = useState<string>(DONATION_CONFIG.EXPLORER_BASE_URL);
   const [labFundingError, setLabFundingError] = useState<string>('');
   const [fundingWidget, setFundingWidget] = useState<{ mode: FundingWidgetMode; rscAmount?: number; source: 'lab' | 'profile' } | null>(null);
   const [activeStoryBeat, setActiveStoryBeat] = useState<StoryBeat | null>(null);
@@ -543,12 +546,14 @@ const App: React.FC = () => {
     setWalletError('');
     setLabFundingStatus('idle');
     setLabFundingHash('');
+    setLabFundingExplorerBaseUrl(DONATION_CONFIG.EXPLORER_BASE_URL);
     setLabFundingError('');
   };
 
   const openFundingWidget = (mode: FundingWidgetMode, rscAmount = DONATION_CONFIG.PRESET_RSC_AMOUNTS[0], source: 'lab' | 'profile' = 'profile') => {
     setLabFundingError('');
     setLabFundingHash('');
+    setLabFundingExplorerBaseUrl(DONATION_CONFIG.EXPLORER_BASE_URL);
     setFundingWidget({ mode, rscAmount, source });
   };
 
@@ -557,19 +562,22 @@ const App: React.FC = () => {
     openFundingWidget('checkout', rscAmount, 'lab');
   };
 
-  const handleFundingWidgetSuccess = (rscAmount: number, txHash = '') => {
+  const handleFundingWidgetSuccess = (rscAmount: number, txHash = '', token: FundingCreditToken = 'RSC') => {
     const credits = rscAmount * DONATION_CONFIG.MISSION_CREDITS_PER_RSC;
-    const shouldFundMission = fundingWidget?.source === 'lab';
+    const explorerBaseUrl = token === 'KRMA'
+      ? DONATION_CONFIG.EXPLORER_BSC_BASE_URL
+      : DONATION_CONFIG.EXPLORER_BASE_URL;
     setStats(prev => ({
       ...prev,
-      coins: shouldFundMission ? prev.coins + credits : prev.coins,
-      profileCredits: shouldFundMission ? prev.profileCredits || 0 : (prev.profileCredits || 0) + credits,
+      coins: prev.coins,
+      profileCredits: (prev.profileCredits || 0) + credits,
       totalCoins: prev.totalCoins + credits
     }));
     audioService.playSound('coin');
 
     setLabFundingStatus('success');
     setLabFundingHash(txHash);
+    setLabFundingExplorerBaseUrl(explorerBaseUrl);
     setLabFundingError('');
 
     if (activeWalletAddress) {
@@ -586,9 +594,9 @@ const App: React.FC = () => {
     }, 5000);
   };
 
-  const handleDirectRscCreditPayment = async (rscAmount: number) => {
+  const handleDirectRscCreditPayment = async (rscAmount: number, token: FundingCreditToken = 'RSC') => {
     if (!thirdwebClient) {
-      throw new Error('Add VITE_THIRDWEB_CLIENT_ID to enable RSC payments.');
+      throw new Error('Add VITE_THIRDWEB_CLIENT_ID to enable token payments.');
     }
 
     let account = thirdwebAccount;
@@ -600,23 +608,30 @@ const App: React.FC = () => {
       throw new Error('Connect a wallet before funding mission credits.');
     }
 
-    if (thirdwebWallet && thirdwebWallet.getChain()?.id !== DONATION_CONFIG.BASE_CHAIN_ID) {
+    const tokenChain = token === 'KRMA' ? thirdwebBscChain : thirdwebBaseChain;
+    const tokenAddress = token === 'KRMA'
+      ? DONATION_CONFIG.KARMA_CONTRACT_ADDRESS
+      : DONATION_CONFIG.RSC_CONTRACT_ADDRESS;
+    const tokenLabel = token === 'KRMA' ? 'KRMA' : 'RSC';
+
+    if (thirdwebWallet && thirdwebWallet.getChain()?.id !== tokenChain.id) {
       setLabFundingStatus('switching_network');
-      await thirdwebWallet.switchChain(thirdwebBaseChain);
+      await thirdwebWallet.switchChain(tokenChain);
     }
 
     setLabFundingStatus('processing');
     setLabFundingError('');
     setLabFundingHash('');
+    setLabFundingExplorerBaseUrl(token === 'KRMA' ? DONATION_CONFIG.EXPLORER_BSC_BASE_URL : DONATION_CONFIG.EXPLORER_BASE_URL);
 
-    const rscContract = getContract({
+    const creditTokenContract = getContract({
       client: thirdwebClient,
-      chain: thirdwebBaseChain,
-      address: DONATION_CONFIG.RSC_CONTRACT_ADDRESS as `0x${string}`
+      chain: tokenChain,
+      address: tokenAddress as `0x${string}`
     });
 
     const transaction = transfer({
-      contract: rscContract,
+      contract: creditTokenContract,
       to: DONATION_CONFIG.RECIPIENT_ADDRESS,
       amount: rscAmount.toString()
     });
@@ -625,10 +640,10 @@ const App: React.FC = () => {
       setLabFundingStatus('confirming');
       const receipt = await sendAndConfirmTransaction({ account, transaction });
       const txHash = receipt.transactionHash || '';
-      handleFundingWidgetSuccess(rscAmount, txHash);
+      handleFundingWidgetSuccess(rscAmount, txHash, token);
       return txHash;
     } catch (error: any) {
-      const message = getUserFacingMessage(error, 'RSC payment was cancelled before credits were added.');
+      const message = getUserFacingMessage(error, `${tokenLabel} payment was cancelled before credits were added.`);
       setLabFundingStatus('error');
       setLabFundingError(message);
       throw new Error(message);
@@ -865,13 +880,13 @@ const App: React.FC = () => {
   const canSelectFundingProposal = showNameInput
     && scoreQualification.isMonthlyChampion;
   const scoreQualificationMessage = scoreQualification.isMonthlyChampion
-    ? 'Monthly champion run. Pick the proposal that should receive the 500 RSC funding-credit allocation.'
+    ? 'Weekly champion run. Pick the proposal that should receive the 100 RSC funding-credit allocation.'
     : scoreQualification.qualifiesMonthlyTop5 && scoreQualification.qualifiesAllTimeTop25
-      ? 'This score qualifies for monthly Top 5 and all-time Top 25. It is saved once and appears on both boards while it ranks on both.'
+      ? 'This score qualifies for weekly Top 5 and all-time Top 25. It is saved once and appears on both boards while it ranks on both.'
       : scoreQualification.qualifiesMonthlyTop5
-        ? `Monthly Top 5 run at projected rank #${scoreQualification.monthlyRank}. Push for #1 to unlock the champion proposal pick.`
+        ? `Weekly Top 5 run at projected rank #${scoreQualification.monthlyRank}. Push for #1 to unlock the champion proposal pick.`
         : scoreQualification.qualifiesAllTimeTop25
-          ? `All-time Top 25 run at projected rank #${scoreQualification.allTimeRank}. Try again this month for #1 so you can steer funding credits.`
+          ? `All-time Top 25 run at projected rank #${scoreQualification.allTimeRank}. Try again this week for #1 so you can steer funding credits.`
           : '';
   const sharePrompt = scoreQualification.isMonthlyChampion && selectedShareProposal
     ? 'Share your No. 1 run and proposal pick.'
@@ -977,6 +992,7 @@ const App: React.FC = () => {
           onClaimProfileCredits={handleClaimProfileCredits}
           labFundingStatus={labFundingStatus}
           labFundingHash={labFundingHash}
+          labFundingExplorerBaseUrl={labFundingExplorerBaseUrl}
           labFundingError={labFundingError}
           gameId={gameId}
         />
@@ -1008,7 +1024,7 @@ const App: React.FC = () => {
                   <div className="flex flex-wrap justify-center gap-2">
                     {scoreQualification.qualifiesMonthlyTop5 ? (
                       <span className="rounded-full border border-emerald-200/25 bg-emerald-300/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">
-                        Monthly #{scoreQualification.monthlyRank}
+                        Weekly #{scoreQualification.monthlyRank}
                       </span>
                     ) : null}
                     {scoreQualification.qualifiesAllTimeTop25 ? (
@@ -1044,9 +1060,9 @@ const App: React.FC = () => {
                     {canSelectFundingProposal ? (
                       <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
                         <div className="mb-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Monthly No. 1 Funding Pick</div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Weekly No. 1 Funding Pick</div>
                           <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-300">
-                            You are taking the monthly lead. Scroll the live ResearchHub proposal list and choose one for the 500 RSC funding-credit allocation.
+                            You are taking the weekly lead. Scroll the live ResearchHub proposal list and choose one for the 100 RSC funding-credit allocation.
                           </p>
                         </div>
 
@@ -1110,8 +1126,8 @@ const App: React.FC = () => {
                     ) : (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center text-[11px] font-semibold leading-relaxed text-slate-400">
                         {scoreQualification.qualifiesAllTimeTop25 && !scoreQualification.qualifiesMonthlyTop5
-                          ? 'This score lands on the all-time board. Try again before month-end for monthly No. 1 and the champion proposal pick.'
-                          : 'Proposal selection unlocks only for the monthly No. 1 pilot. This score still submits to each leaderboard it qualifies for.'}
+                          ? 'This score lands on the all-time board. Try again before week-end for weekly No. 1 and the champion proposal pick.'
+                          : 'Proposal selection unlocks only for the weekly No. 1 pilot. This score still submits to each leaderboard it qualifies for.'}
                       </div>
                     )}
 
@@ -1229,7 +1245,7 @@ const App: React.FC = () => {
                 <div>
                   <strong className="text-indigo-400">FUNDING EVENT:</strong>
                   <p className="mt-1">
-                    The monthly leaderboard now drives the funding allocation: the No. 1 pilot chooses a ResearchHub proposal, and Scott can direct funding credits toward that winner's pick.
+                    The weekly leaderboard now drives the funding allocation: the No. 1 pilot chooses a ResearchHub proposal, and Scott can direct funding credits toward that winner's pick.
                   </p>
                 </div>
                 <p className="mt-4 border-t border-gray-700 pt-2 text-xs italic text-gray-500">

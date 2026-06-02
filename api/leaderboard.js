@@ -40,17 +40,24 @@ const isMissingProposalColumnError = (error) => (
   /proposal_|schema cache|column/i.test(error?.message || '')
 );
 
-const getCurrentMonthRange = () => {
+const getCurrentWeekRange = () => {
   const now = new Date();
+  const dayOffsetFromMonday = (now.getDay() + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - dayOffsetFromMonday);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+
   return {
-    start: new Date(now.getFullYear(), now.getMonth(), 1),
-    end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    start,
+    end
   };
 };
 
-const isCurrentMonthEntry = (entry) => {
+const isCurrentWeekEntry = (entry) => {
   const timestamp = new Date(entry.date || 0).getTime();
-  const { start, end } = getCurrentMonthRange();
+  const { start, end } = getCurrentWeekRange();
   return Number.isFinite(timestamp) && timestamp >= start.getTime() && timestamp < end.getTime();
 };
 
@@ -100,7 +107,7 @@ const toLeaderboardPayload = (scores) => {
   const archive = dedupeAndSort(scores, SYNC_SCORE_LIMIT);
   return {
     scores: dedupeAndSort(archive, MAX_SCORES),
-    monthlyScores: dedupeAndSort(archive.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES)
+    monthlyScores: dedupeAndSort(archive.filter(isCurrentWeekEntry), MAX_MONTHLY_SCORES)
   };
 };
 
@@ -168,7 +175,7 @@ const requestSupabaseScores = async (selectColumns, query = '') => {
 };
 
 const readSupabaseScores = async () => {
-  const { start, end } = getCurrentMonthRange();
+  const { start, end } = getCurrentWeekRange();
   const monthlyQuery = `&date=gte.${encodeURIComponent(start.toISOString())}&date=lt.${encodeURIComponent(end.toISOString())}&limit=${MAX_MONTHLY_SCORES}`;
   let rows;
   let monthlyRows;

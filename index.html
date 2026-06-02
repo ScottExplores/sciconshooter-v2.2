@@ -351,6 +351,19 @@
         border-color: rgba(96, 165, 250, 0.55);
       }
 
+      .scicon-promo-ticker-track {
+        animation: scicon-promo-ticker 24s linear infinite;
+      }
+
+      @keyframes scicon-promo-ticker {
+        from {
+          transform: translateX(0);
+        }
+        to {
+          transform: translateX(-50%);
+        }
+      }
+
       @media (max-width: 640px) {
         .tw-modal {
           top: calc(env(safe-area-inset-top) + 12px) !important;

@@ -32,7 +32,8 @@ export enum PowerupType {
   TRIPLE_SHOT = 'TRIPLE_SHOT', // Angled spread (Brian)
   MAGNET = 'MAGNET', // Coin Magnet (Patrick)
   SHIELD = 'SHIELD', // Invincibility (Jeffrey)
-  EXTRA_LIFE = 'EXTRA_LIFE' // Extra Life (Arshia)
+  EXTRA_LIFE = 'EXTRA_LIFE', // Extra Life (Arshia)
+  KARMA_LASER = 'KARMA_LASER' // Promotional KRMA beam
 }
 
 export interface Position {

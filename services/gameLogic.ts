@@ -266,6 +266,7 @@ export class GameEngine {
       ASSETS.FOUNDER_4,
       ASSETS.FOUNDER_ARSHIA,
       ASSETS.RSC_TOKEN,
+      ASSETS.KARMA_TOKEN,
       ASSETS.GAME_BG_BACK,
       ASSETS.GAME_BG_STARS,
       ASSETS.GAME_BG_PLANET,
@@ -766,6 +767,7 @@ export class GameEngine {
     });
 
     this.checkCollisions();
+    this.applyKarmaLaserDamage();
     this.entities = this.entities.filter(e => !e.markedForDeletion);
     this.bgY = (this.bgY + 1) % this.height;
   }
@@ -821,6 +823,106 @@ export class GameEngine {
       m.isPlayerShot = true; // Mark as player shot
       this.entities.push(m);
       audioService.playSound('shoot'); // Ideally a missile sound
+  }
+
+  isEnemyTarget(entity: Entity) {
+    return entity.type === EntityType.ENEMY_DRONE
+      || entity.type === EntityType.ENEMY_BRICK
+      || entity.type === EntityType.ENEMY_JOURNAL
+      || entity.type === EntityType.ENEMY_SWARM
+      || entity.type === EntityType.BOSS
+      || entity.type === EntityType.MINI_BOSS
+      || entity.type === EntityType.ENEMY_INVADER;
+  }
+
+  handleEnemyDestroyed(target: Entity) {
+    if (target.markedForDeletion) return;
+
+    target.markedForDeletion = true;
+    this.spawnExplosion(target.x, target.y, target.color);
+    this.stats.enemiesDefeated++;
+    const waveMult = Math.pow(2, this.stats.wave - 1);
+    let basePoints = 10;
+    if (target.type === EntityType.ENEMY_DRONE) basePoints = 10;
+    if (target.type === EntityType.ENEMY_SWARM) basePoints = 12;
+    if (target.type === EntityType.ENEMY_BRICK || target.type === EntityType.ENEMY_INVADER) basePoints = 20;
+    if (target.type === EntityType.ENEMY_JOURNAL) basePoints = 30;
+
+    this.stats.score += basePoints * waveMult;
+    this.spawnCoin(target.x + target.width / 2, target.y + target.height / 2);
+    const isElite = target.type === EntityType.ENEMY_JOURNAL
+      || target.type === EntityType.ENEMY_BRICK
+      || target.type === EntityType.MINI_BOSS
+      || target.type === EntityType.ENEMY_INVADER;
+    if (isElite && Math.random() > 0.92) this.spawnPowerup(target.x, target.y);
+
+    if (target.type === EntityType.MINI_BOSS) {
+      this.stats.score += 500 * waveMult;
+      if (this.stats.wave === 1) {
+        for (let i = 0; i < 4; i++) {
+          this.spawnCoin(target.x + Math.random() * target.width, target.y + Math.random() * target.height);
+        }
+      }
+      this.spawnPowerup(target.x, target.y);
+      this.miniBossRef = null;
+      this.waveProgressFrames += 120;
+    }
+
+    if (target.type === EntityType.BOSS) {
+      this.stats.score += 1000 * waveMult;
+      this.bossRef = null;
+      this.mainBossDefeated = true;
+      this.inBossWarningSequence = false;
+      this.pendingBossType = null;
+      this.bossWarningFrame = 0;
+      for (let i = 0; i < 8; i++) {
+        this.spawnCoin(target.x + Math.random() * target.width, target.y + Math.random() * target.height);
+      }
+      this.spawnPowerup(target.x + 50, target.y + 50);
+      this.spawnPowerup(target.x + 100, target.y + 100);
+
+      audioService.playSound('electricity');
+
+      this.spawnFloatingText(this.width / 2, this.height / 2, "WAVE COMPLETE!", "#00FF00");
+      setTimeout(() => {
+        this.startNextWave();
+      }, 2000);
+    }
+  }
+
+  applyKarmaLaserDamage() {
+    if (!this.activePowerups.has(PowerupType.KARMA_LASER) || this.frameCount % 2 !== 0) return;
+
+    const beamWidth = this.width < 520 ? 46 : 56;
+    const beamBox = {
+      x: this.player.x + (this.player.width / 2) - (beamWidth / 2),
+      y: 0,
+      width: beamWidth,
+      height: Math.max(0, this.player.y + this.player.height * 0.18)
+    };
+
+    const intersectsBeam = (target: Entity) => {
+      const box = this.getCollisionBox(target);
+      return !(box.x > beamBox.x + beamBox.width
+        || box.x + box.width < beamBox.x
+        || box.y > beamBox.y + beamBox.height
+        || box.y + box.height < beamBox.y);
+    };
+
+    this.entities.forEach((target) => {
+      if (target.markedForDeletion || !this.isEnemyTarget(target) || !intersectsBeam(target)) return;
+
+      const isBossTarget = target.type === EntityType.BOSS || target.type === EntityType.MINI_BOSS || target.type === EntityType.ENEMY_INVADER;
+      target.hp -= isBossTarget ? 0.9 : 1.45;
+
+      if (this.frameCount % 8 === 0) {
+        this.entities.push(new Particle(target.x + target.width / 2, target.y + target.height / 2, '#a855f7', 1.8));
+      }
+
+      if (target.hp <= 0) {
+        this.handleEnemyDestroyed(target);
+      }
+    });
   }
 
   spawnEnemies() {
@@ -1187,9 +1289,10 @@ export class GameEngine {
   spawnPowerup(x: number, y: number) {
     const r = Math.random();
     let type: PowerupType = PowerupType.DOUBLE_SHOT;
-    if (r < 0.25) type = PowerupType.DOUBLE_SHOT;
-    else if (r < 0.5) type = PowerupType.TRIPLE_SHOT;
-    else if (r < 0.75) type = PowerupType.MAGNET;
+    if (r < 0.14) type = PowerupType.KARMA_LASER;
+    else if (r < 0.36) type = PowerupType.DOUBLE_SHOT;
+    else if (r < 0.58) type = PowerupType.TRIPLE_SHOT;
+    else if (r < 0.79) type = PowerupType.MAGNET;
     else type = PowerupType.SHIELD;
 
     const p = new Entity(EntityType.POWERUP, x, y);
@@ -1233,7 +1336,8 @@ export class GameEngine {
 
     if (type !== PowerupType.EXTRA_LIFE) {
       const currentDuration = this.activePowerups.get(type) || 0;
-      this.activePowerups.set(type, currentDuration + GAME_CONFIG.POWERUP_DURATION);
+      const duration = type === PowerupType.KARMA_LASER ? GAME_CONFIG.KARMA_LASER_DURATION : GAME_CONFIG.POWERUP_DURATION;
+      this.activePowerups.set(type, currentDuration + duration);
     }
 
     audioService.playSound('powerup');
@@ -1253,6 +1357,9 @@ export class GameEngine {
     } else if (type === PowerupType.DOUBLE_SHOT) {
       this.spawnFloatingText(cx, cy - 20, "DOUBLE SHOT!", "#ffbb33");
       this.spawnRingEffect(cx, cy, "#ffbb33");
+    } else if (type === PowerupType.KARMA_LASER) {
+      this.spawnFloatingText(cx, cy - 20, "KARMA BEAM!", "#a855f7");
+      this.spawnRingEffect(cx, cy, "#a855f7");
     } else if (type === PowerupType.EXTRA_LIFE) {
       this.lives = Math.min(this.lives + 1, GAME_CONFIG.MAX_LIVES);
       this.stats.lives = this.lives;
@@ -1399,66 +1506,16 @@ export class GameEngine {
          this.entities.forEach(target => {
             const isTargetEnemy = target.type === EntityType.ENEMY_DRONE || target.type === EntityType.ENEMY_BRICK || target.type === EntityType.ENEMY_JOURNAL || target.type === EntityType.ENEMY_SWARM || target.type === EntityType.BOSS || target.type === EntityType.MINI_BOSS || target.type === EntityType.ENEMY_INVADER;
             if (isTargetEnemy && intersect(e, target)) {
-               e.markedForDeletion = true;
-               
                // Boss-type enemies get shaved down a bit faster so fights don't drag.
                const isBossTarget = target.type === EntityType.BOSS || target.type === EntityType.MINI_BOSS;
                const dmg = e.type === EntityType.MISSILE
                  ? (isBossTarget ? 8 : 5)
                  : (isBossTarget ? 1.45 : 1);
+               if (!e.isBeam) e.markedForDeletion = true;
                target.hp -= dmg;
                
                if (target.hp <= 0) {
-                 target.markedForDeletion = true;
-                 this.spawnExplosion(target.x, target.y, target.color);
-                 this.stats.enemiesDefeated++;
-                 const waveMult = Math.pow(2, this.stats.wave - 1);
-                 let basePoints = 10;
-                 if (target.type === EntityType.ENEMY_DRONE) basePoints = 10;
-                 if (target.type === EntityType.ENEMY_SWARM) basePoints = 12;
-                 if (target.type === EntityType.ENEMY_BRICK || target.type === EntityType.ENEMY_INVADER) basePoints = 20; 
-                 if (target.type === EntityType.ENEMY_JOURNAL) basePoints = 30; 
-                 
-                 this.stats.score += basePoints * waveMult;
-                 this.spawnCoin(target.x + target.width/2, target.y + target.height/2);
-                 const isElite = target.type === EntityType.ENEMY_JOURNAL || target.type === EntityType.ENEMY_BRICK || target.type === EntityType.MINI_BOSS || target.type === EntityType.ENEMY_INVADER;
-                 // Make rarer: 0.85 -> 0.92
-                 if (isElite && Math.random() > 0.92) this.spawnPowerup(target.x, target.y);
-
-                 if (target.type === EntityType.MINI_BOSS) {
-                     this.stats.score += 500 * waveMult;
-                     if (this.stats.wave === 1) {
-                         for (let i=0; i<4; i++) {
-                             this.spawnCoin(target.x + Math.random()*target.width, target.y + Math.random()*target.height);
-                         }
-                     }
-                     this.spawnPowerup(target.x, target.y);
-                     // Removed second powerup
-                     this.miniBossRef = null; 
-                     this.waveProgressFrames += 120; 
-                 }
-
-                 if (target.type === EntityType.BOSS) {
-                    this.stats.score += 1000 * waveMult; 
-                    this.bossRef = null;
-                    this.mainBossDefeated = true;
-                    this.inBossWarningSequence = false;
-                    this.pendingBossType = null;
-                    this.bossWarningFrame = 0;
-                    for(let i=0; i<8; i++) {
-                        this.spawnCoin(target.x + Math.random()*target.width, target.y + Math.random()*target.height);
-                    }
-                    this.spawnPowerup(target.x + 50, target.y + 50);
-                    this.spawnPowerup(target.x + 100, target.y + 100);
-                    
-                    // TRIGGER ELECTRICITY SOUND
-                    audioService.playSound('electricity');
-                    
-                    this.spawnFloatingText(this.width/2, this.height/2, "WAVE COMPLETE!", "#00FF00");
-                    setTimeout(() => {
-                        this.startNextWave();
-                    }, 2000);
-                 }
+                 this.handleEnemyDestroyed(target);
                }
             }
          });
@@ -1701,6 +1758,7 @@ export class GameEngine {
     ctx.filter = "none";
     ctx.shadowBlur = 0;
     this.entities.forEach(e => this.drawEntity(ctx, e));
+    this.drawKarmaLaser(ctx);
     if (this.lives > 0) this.drawEntity(ctx, this.player);
     
     const invaders = this.entities.filter(e => e.type === EntityType.ENEMY_INVADER);
@@ -1843,6 +1901,54 @@ export class GameEngine {
       ctx.restore();
   }
 
+  drawKarmaLaser(ctx: CanvasRenderingContext2D) {
+      const remaining = this.activePowerups.get(PowerupType.KARMA_LASER) || 0;
+      if (remaining <= 0) return;
+
+      const centerX = this.player.x + this.player.width / 2;
+      const startY = this.player.y + this.player.height * 0.16;
+      const width = this.width < 520 ? 46 : 56;
+      const pulse = 0.75 + Math.sin(this.frameCount * 0.28) * 0.25;
+      const endFade = Math.min(1, remaining / 45);
+      const gradient = ctx.createLinearGradient(centerX, 0, centerX, startY);
+      gradient.addColorStop(0, 'rgba(34,211,238,0.03)');
+      gradient.addColorStop(0.2, 'rgba(125,211,252,0.62)');
+      gradient.addColorStop(0.5, 'rgba(168,85,247,0.72)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0.96)');
+
+      ctx.save();
+      ctx.globalAlpha = endFade;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.shadowBlur = 28 + pulse * 18;
+      ctx.shadowColor = '#a855f7';
+
+      ctx.fillStyle = `rgba(168,85,247,${0.18 + pulse * 0.12})`;
+      ctx.fillRect(centerX - width * 0.82, 0, width * 1.64, startY);
+      ctx.fillStyle = `rgba(34,211,238,${0.18 + pulse * 0.1})`;
+      ctx.fillRect(centerX - width * 0.5, 0, width, startY);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(centerX - width * 0.22, 0, width * 0.44, startY);
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(255,255,255,${0.7 + pulse * 0.2})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX - width * 0.34, 0);
+      ctx.lineTo(centerX - width * 0.08, startY);
+      ctx.moveTo(centerX + width * 0.34, 0);
+      ctx.lineTo(centerX + width * 0.08, startY);
+      ctx.stroke();
+
+      for (let i = 0; i < 9; i++) {
+        const y = (this.frameCount * (2.4 + i * 0.2) + i * 47) % Math.max(1, startY);
+        const wobble = Math.sin((this.frameCount * 0.08) + i) * width * 0.35;
+        ctx.fillStyle = i % 2 === 0 ? '#f0abfc' : '#67e8f9';
+        ctx.fillRect(centerX + wobble, y, 3, 18);
+      }
+
+      ctx.restore();
+  }
+
   drawEntity(ctx: CanvasRenderingContext2D, e: Entity) {
     if (e.isBeam) {
         this.drawLaser(ctx, e);
@@ -1894,6 +2000,22 @@ export class GameEngine {
          ctx.setLineDash([15, 10]); 
          ctx.beginPath();
          ctx.arc(0, 0, e.width/2 + 15, 0, Math.PI * 2);
+         ctx.stroke();
+         ctx.restore();
+       }
+       if (this.activePowerups.has(PowerupType.KARMA_LASER)) {
+         const pulse = Math.sin(this.frameCount * 0.24) * 4;
+         ctx.save();
+         ctx.strokeStyle = 'rgba(168, 85, 247, 0.75)';
+         ctx.lineWidth = 3;
+         ctx.shadowBlur = 18;
+         ctx.shadowColor = '#a855f7';
+         ctx.beginPath();
+         ctx.arc(0, 0, e.width / 2 + 18 + pulse, 0, Math.PI * 2);
+         ctx.stroke();
+         ctx.strokeStyle = 'rgba(34, 211, 238, 0.48)';
+         ctx.beginPath();
+         ctx.arc(0, 0, e.width / 2 + 8 - pulse * 0.4, 0, Math.PI * 2);
          ctx.stroke();
          ctx.restore();
        }
@@ -1967,6 +2089,7 @@ export class GameEngine {
         if (type === PowerupType.SHIELD) imgUrl = ASSETS.FOUNDER_JEFFREY;
         if (type === PowerupType.DOUBLE_SHOT) imgUrl = ASSETS.FOUNDER_4;
         if (type === PowerupType.EXTRA_LIFE) imgUrl = ASSETS.FOUNDER_ARSHIA; // Arshia
+        if (type === PowerupType.KARMA_LASER) imgUrl = ASSETS.KARMA_TOKEN;
         
         const img = imageCache[imgUrl];
         if (img && img.complete && img.naturalWidth > 0) {

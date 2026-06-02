@@ -15,17 +15,24 @@ const sanitizeUrl = (value: unknown): string | undefined => {
   return url && /^https?:\/\//i.test(url) ? url : undefined;
 };
 
-const getCurrentMonthRange = () => {
+const getCurrentWeekRange = () => {
   const now = new Date();
+  const dayOffsetFromMonday = (now.getDay() + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - dayOffsetFromMonday);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+
   return {
-    start: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
-    end: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()
+    start: start.getTime(),
+    end: end.getTime()
   };
 };
 
-const isCurrentMonthEntry = (entry: LeaderboardEntry) => {
+const isCurrentWeekEntry = (entry: LeaderboardEntry) => {
   const timestamp = new Date(entry.date || 0).getTime();
-  const { start, end } = getCurrentMonthRange();
+  const { start, end } = getCurrentWeekRange();
   return Number.isFinite(timestamp) && timestamp >= start && timestamp < end;
 };
 
@@ -70,7 +77,7 @@ const dedupeAndSort = (scores: LeaderboardEntry[], limit: number): LeaderboardEn
 
 const toLeaderboardData = (scores: LeaderboardEntry[], remoteSaved?: boolean): LeaderboardData => {
   const allTime = dedupeAndSort(scores, MAX_SCORES);
-  const monthlyScores = dedupeAndSort(scores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+  const monthlyScores = dedupeAndSort(scores.filter(isCurrentWeekEntry), MAX_MONTHLY_SCORES);
 
   return {
     scores: allTime,
@@ -98,7 +105,7 @@ const readRemoteLeaderboardData = async (): Promise<LeaderboardData> => {
   const scores = Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
   const monthlyScores = Array.isArray(data.monthlyScores)
     ? dedupeAndSort(data.monthlyScores, MAX_MONTHLY_SCORES)
-    : dedupeAndSort(scores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+    : dedupeAndSort(scores.filter(isCurrentWeekEntry), MAX_MONTHLY_SCORES);
 
   return { scores, monthlyScores };
 };
@@ -121,7 +128,7 @@ const writeRemoteLeaderboardData = async (entry: LeaderboardEntry): Promise<Lead
   const nextScores = Array.isArray(data.scores) ? dedupeAndSort(data.scores, MAX_SCORES) : [];
   const monthlyScores = Array.isArray(data.monthlyScores)
     ? dedupeAndSort(data.monthlyScores, MAX_MONTHLY_SCORES)
-    : dedupeAndSort(nextScores.filter(isCurrentMonthEntry), MAX_MONTHLY_SCORES);
+    : dedupeAndSort(nextScores.filter(isCurrentWeekEntry), MAX_MONTHLY_SCORES);
 
   return { scores: nextScores, monthlyScores, remoteSaved: true };
 };

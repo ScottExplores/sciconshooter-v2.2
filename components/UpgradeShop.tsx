@@ -15,6 +15,7 @@ interface UpgradeShopProps {
   onClaimProfileCredits: () => void;
   labFundingStatus: DonationStatus;
   labFundingHash: string;
+  labFundingExplorerBaseUrl: string;
   labFundingError: string;
   gameId: number;
 }
@@ -26,7 +27,7 @@ const fundingPackages = DONATION_CONFIG.PRESET_RSC_AMOUNTS.map((amount) => ({
 
 const shortenAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
-type FounderPowerupType = Exclude<PowerupType, PowerupType.EXTRA_LIFE>;
+type FounderPowerupType = Exclude<PowerupType, PowerupType.EXTRA_LIFE | PowerupType.KARMA_LASER>;
 
 const upgradeCopy: Record<keyof Upgrades, { title: string; tag: string; icon: string; description: string }> = {
   fireRate: {
@@ -80,9 +81,9 @@ const purchasablePowerups: FounderPowerupType[] = [
 ];
 
 const statusText: Record<DonationStatus, string> = {
-  idle: 'Base confirms the RSC transfer before adding credits.',
+  idle: 'Confirmed token transfers save wallet-linked credits.',
   switching_network: 'Switching to Base...',
-  processing: 'Confirm the RSC transfer in your wallet.',
+  processing: 'Confirm the token transfer in your wallet.',
   confirming: 'Waiting for Base confirmation...',
   success: 'Credits added.',
   error: ''
@@ -101,6 +102,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
   onClaimProfileCredits,
   labFundingStatus,
   labFundingHash,
+  labFundingExplorerBaseUrl,
   labFundingError,
   gameId
 }) => {
@@ -366,7 +368,7 @@ const UpgradeShop: React.FC<UpgradeShopProps> = ({
 
                 {labFundingHash ? (
                   <a
-                    href={`${DONATION_CONFIG.EXPLORER_BASE_URL}/tx/${labFundingHash}`}
+                    href={`${labFundingExplorerBaseUrl}/tx/${labFundingHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-2 inline-block font-mono text-[10px] uppercase tracking-[0.16em] text-cyan-300 underline underline-offset-2 hover:text-white"

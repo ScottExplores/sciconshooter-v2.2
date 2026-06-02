@@ -4,7 +4,14 @@ import {
   formatUsd,
   ResearchHubProposal
 } from '../services/researchHubProposals';
-import { DONATION_CONFIG } from '../constants';
+import {
+  formatRscPrice,
+  formatRscPriceChange,
+  getKarmaMarketPrice,
+  getRscMarketPrice,
+  RscMarketPrice
+} from '../services/rscMarket';
+import { ASSETS, DONATION_CONFIG } from '../constants';
 
 type ProposalFeedStatus = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -22,16 +29,18 @@ interface StartScreenProps {
   onOpenTreasurySend: () => void;
 }
 
-type LeaderboardView = 'monthly' | 'allTime';
+type LeaderboardView = 'weekly' | 'allTime';
 
-const getMonthlyAllocationMeta = () => {
+const getWeeklyAllocationMeta = () => {
   const now = new Date();
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const daysUntilSunday = (7 - now.getDay()) % 7;
+  const weekEnd = new Date(now);
+  weekEnd.setDate(now.getDate() + daysUntilSunday);
 
   return {
-    daysLeft: Math.max(0, lastDay.getDate() - now.getDate()),
-    endLabel: lastDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    allocationRsc: 500
+    daysLeft: daysUntilSunday,
+    endLabel: weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    allocationRsc: 100
   };
 };
 
@@ -71,58 +80,162 @@ const StartScreen: React.FC<StartScreenProps> = ({
   const [activeProposalIndex, setActiveProposalIndex] = useState(0);
   const [isProposalFlipping, setIsProposalFlipping] = useState(false);
   const [expandedFundingKey, setExpandedFundingKey] = useState<string | null>(null);
-  const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>('monthly');
+  const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>('weekly');
   const [showAllocationAmount, setShowAllocationAmount] = useState(false);
+  const [rscMarketPrice, setRscMarketPrice] = useState<RscMarketPrice | null>(null);
+  const [karmaMarketPrice, setKarmaMarketPrice] = useState<RscMarketPrice | null>(null);
+  const [rscPriceStatus, setRscPriceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [karmaPriceStatus, setKarmaPriceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [showAllocationInfo, setShowAllocationInfo] = useState(false);
   const treasuryAddressRef = useRef<HTMLInputElement | null>(null);
-  const monthlyAllocation = useMemo(getMonthlyAllocationMeta, []);
-  const visibleLeaderboard = leaderboardView === 'monthly'
+  const proposalFlipTimeoutRef = useRef<number | undefined>(undefined);
+  const proposalSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const weeklyAllocation = useMemo(getWeeklyAllocationMeta, []);
+  const visibleLeaderboard = leaderboardView === 'weekly'
     ? monthlyLeaderboard.slice(0, 5)
     : allTimeLeaderboard.slice(0, 25);
-  const monthlyChampion = monthlyLeaderboard[0];
-  const monthlyChampionProposal = monthlyChampion?.proposalTitle ? {
-    id: monthlyChampion.proposalId,
-    title: monthlyChampion.proposalTitle,
-    url: monthlyChampion.proposalUrl,
-    author: monthlyChampion.proposalAuthor,
-    pilot: monthlyChampion.name
+  const weeklyChampion = monthlyLeaderboard[0];
+  const weeklyChampionProposal = weeklyChampion?.proposalTitle ? {
+    id: weeklyChampion.proposalId,
+    title: weeklyChampion.proposalTitle,
+    url: weeklyChampion.proposalUrl,
+    author: weeklyChampion.proposalAuthor,
+    pilot: weeklyChampion.name
   } : null;
-  const monthlyChampionLiveProposal = monthlyChampionProposal
-    ? proposals.find((proposal) => proposal.id === monthlyChampionProposal.id || proposal.title === monthlyChampionProposal.title)
+  const weeklyChampionLiveProposal = weeklyChampionProposal
+    ? proposals.find((proposal) => proposal.id === weeklyChampionProposal.id || proposal.title === weeklyChampionProposal.title)
     : undefined;
-  const championCard = monthlyChampionProposal ? {
-    title: monthlyChampionLiveProposal?.title || monthlyChampionProposal.title,
-    url: monthlyChampionLiveProposal?.url || monthlyChampionProposal.url,
-    author: monthlyChampionLiveProposal?.author || monthlyChampionProposal.author || 'ResearchHub proposal',
-    organization: monthlyChampionLiveProposal?.organization,
-    imageUrl: monthlyChampionLiveProposal?.imageUrl,
-    status: monthlyChampionLiveProposal?.status
+  const championCard = weeklyChampionProposal ? {
+    title: weeklyChampionLiveProposal?.title || weeklyChampionProposal.title,
+    url: weeklyChampionLiveProposal?.url || weeklyChampionProposal.url,
+    author: weeklyChampionLiveProposal?.author || weeklyChampionProposal.author || 'ResearchHub proposal',
+    organization: weeklyChampionLiveProposal?.organization,
+    imageUrl: weeklyChampionLiveProposal?.imageUrl,
+    status: weeklyChampionLiveProposal?.status
   } : null;
-  const isChampionProposal = (proposal: ResearchHubProposal) => Boolean(monthlyChampionProposal)
-    && (proposal.id === monthlyChampionProposal?.id || proposal.title === monthlyChampionProposal?.title);
+  const isChampionProposal = (proposal: ResearchHubProposal) => Boolean(weeklyChampionProposal)
+    && (proposal.id === weeklyChampionProposal?.id || proposal.title === weeklyChampionProposal?.title);
   const stackedProposals = useMemo(() => (
     proposals.length > 0 ? [0, 1, 2].slice(0, proposals.length).map((offset) => ({
       offset,
       proposal: proposals[(activeProposalIndex + offset) % proposals.length]
     })) : []
   ), [activeProposalIndex, proposals]);
+  const rscPriceChange = formatRscPriceChange(rscMarketPrice?.priceChange24h);
+  const rscPriceChangeIsPositive = (rscMarketPrice?.priceChange24h ?? 0) >= 0;
+  const karmaPriceChange = formatRscPriceChange(karmaMarketPrice?.priceChange24h);
+  const karmaPriceChangeIsPositive = (karmaMarketPrice?.priceChange24h ?? 0) >= 0;
+
+  const moveProposalDeck = (direction: 1 | -1) => {
+    if (proposals.length < 2) return;
+
+    if (proposalFlipTimeoutRef.current) {
+      window.clearTimeout(proposalFlipTimeoutRef.current);
+    }
+
+    setIsProposalFlipping(true);
+    proposalFlipTimeoutRef.current = window.setTimeout(() => {
+      setActiveProposalIndex((index) => (index + direction + proposals.length) % proposals.length);
+      setIsProposalFlipping(false);
+      proposalFlipTimeoutRef.current = undefined;
+    }, 260);
+  };
+
+  const handleProposalTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    proposalSwipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+
+  const handleProposalTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = proposalSwipeStartRef.current;
+    const touch = event.changedTouches[0];
+    proposalSwipeStartRef.current = null;
+
+    if (!start || !touch) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const isHorizontalSwipe = Math.abs(deltaX) > 44 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25;
+
+    if (!isHorizontalSwipe) return;
+
+    moveProposalDeck(deltaX < 0 ? 1 : -1);
+  };
 
   useEffect(() => {
     if (proposals.length < 2) return undefined;
 
-    let flipTimeout: number | undefined;
     const timer = window.setInterval(() => {
+      if (proposalFlipTimeoutRef.current) {
+        window.clearTimeout(proposalFlipTimeoutRef.current);
+      }
+
       setIsProposalFlipping(true);
-      flipTimeout = window.setTimeout(() => {
+      proposalFlipTimeoutRef.current = window.setTimeout(() => {
         setActiveProposalIndex((index) => (index + 1) % proposals.length);
         setIsProposalFlipping(false);
+        proposalFlipTimeoutRef.current = undefined;
       }, 640);
-    }, 5600);
+    }, 6800);
 
     return () => {
       window.clearInterval(timer);
-      if (flipTimeout) window.clearTimeout(flipTimeout);
+      if (proposalFlipTimeoutRef.current) {
+        window.clearTimeout(proposalFlipTimeoutRef.current);
+        proposalFlipTimeoutRef.current = undefined;
+      }
     };
   }, [proposals.length]);
+
+  useEffect(() => () => {
+    if (proposalFlipTimeoutRef.current) {
+      window.clearTimeout(proposalFlipTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMarketPrices = async () => {
+      try {
+        const [rscPrice, karmaPrice] = await Promise.allSettled([
+          getRscMarketPrice(),
+          getKarmaMarketPrice()
+        ]);
+
+        if (!isMounted) return;
+
+        if (rscPrice.status === 'fulfilled') {
+          setRscMarketPrice(rscPrice.value);
+          setRscPriceStatus('ready');
+        } else {
+          console.error('RSC price error:', rscPrice.reason);
+          setRscPriceStatus('error');
+        }
+
+        if (karmaPrice.status === 'fulfilled') {
+          setKarmaMarketPrice(karmaPrice.value);
+          setKarmaPriceStatus('ready');
+        } else {
+          console.error('KRMA price error:', karmaPrice.reason);
+          setKarmaPriceStatus('error');
+        }
+      } catch (error) {
+        console.error('Market price error:', error);
+        if (!isMounted) return;
+        setRscPriceStatus('error');
+        setKarmaPriceStatus('error');
+      }
+    };
+
+    loadMarketPrices();
+    const timer = window.setInterval(loadMarketPrices, 120000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -249,6 +362,46 @@ const StartScreen: React.FC<StartScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(37,99,235,0.28),transparent_34%),radial-gradient(circle_at_90%_12%,rgba(34,197,94,0.12),transparent_30%),linear-gradient(180deg,rgba(5,8,22,0.42),rgba(5,8,22,0.98))]"></div>
       <div className="absolute inset-0 bg-[linear-gradient(rgba(226,232,240,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(226,232,240,0.035)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
 
+      <div className="absolute left-[calc(0.75rem+env(safe-area-inset-left))] top-[calc(0.75rem+env(safe-area-inset-top))] z-40 flex max-w-[calc(100%-8rem)] items-center gap-1.5 overflow-x-auto pr-1">
+        <a
+          href={rscMarketPrice?.sourceUrl || DONATION_CONFIG.RSC_SWAP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-cyan-200/25 bg-black/72 px-2.5 py-1.5 font-mono text-white shadow-[0_0_28px_rgba(34,211,238,0.16)] backdrop-blur-md transition hover:border-cyan-100"
+          aria-label="ResearchCoin market price"
+        >
+          <img src={ASSETS.REAL_RSC_ICON} alt="" className="h-6 w-6 rounded-full border border-white/15 bg-white" />
+          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100">RSC</span>
+          <span className="text-xs font-black text-white">
+            {rscPriceStatus === 'loading' ? '...' : rscPriceStatus === 'error' ? '--' : formatRscPrice(rscMarketPrice?.priceUsd)}
+          </span>
+          {rscPriceChange ? (
+            <span className={`hidden rounded-full px-1.5 py-0.5 text-[8px] font-black min-[420px]:inline ${rscPriceChangeIsPositive ? 'bg-emerald-300/18 text-emerald-100' : 'bg-red-300/18 text-red-100'}`}>
+              {rscPriceChange}
+            </span>
+          ) : null}
+        </a>
+
+        <a
+          href={DONATION_CONFIG.KARMA_SWAP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-purple-200/28 bg-black/72 px-2.5 py-1.5 font-mono text-white shadow-[0_0_28px_rgba(168,85,247,0.18)] backdrop-blur-md transition hover:border-purple-100"
+          aria-label="KARMA market price"
+        >
+          <img src={ASSETS.KARMA_TOKEN} alt="" className="h-6 w-6 rounded-full border border-purple-100/40 bg-slate-950 object-cover" />
+          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-purple-100">KRMA</span>
+          <span className="text-xs font-black text-white">
+            {karmaPriceStatus === 'loading' ? '...' : karmaPriceStatus === 'error' ? '--' : formatRscPrice(karmaMarketPrice?.priceUsd)}
+          </span>
+          {karmaPriceChange ? (
+            <span className={`hidden rounded-full px-1.5 py-0.5 text-[8px] font-black min-[420px]:inline ${karmaPriceChangeIsPositive ? 'bg-emerald-300/18 text-emerald-100' : 'bg-red-300/18 text-red-100'}`}>
+              {karmaPriceChange}
+            </span>
+          ) : null}
+        </a>
+      </div>
+
       <div className="relative z-10 mx-auto flex h-[100dvh] w-full max-w-6xl touch-pan-y flex-col gap-3 overflow-y-auto px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-14 custom-scrollbar sm:px-4 sm:pb-4 md:pt-4">
         <div className="flex min-h-[260px] shrink-0 flex-col gap-3 overflow-visible rounded-[26px] border border-white/10 bg-slate-950/72 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:min-h-[250px] sm:p-4 lg:min-h-[180px]">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -275,24 +428,39 @@ const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </button>
 
-            <div className="rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-3 sm:p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-100/80">Monthly Allocation</div>
+            <div className="relative rounded-[22px] border border-yellow-200/20 bg-white/[0.07] p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-100/80">Weekly Allocation</div>
+                <button
+                  type="button"
+                  onClick={() => setShowAllocationInfo((value) => !value)}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-yellow-100/25 bg-yellow-200/10 text-[11px] font-black text-yellow-100 transition hover:border-yellow-100/60 hover:bg-yellow-200/20"
+                  aria-expanded={showAllocationInfo}
+                  aria-label="Weekly allocation information"
+                >
+                  i
+                </button>
+              </div>
               <div className="relative mt-2 min-h-[64px] overflow-hidden">
                 <div className={`absolute inset-0 flex items-end justify-between gap-3 transition-all duration-500 ${showAllocationAmount ? '-translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
-                  <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{monthlyAllocation.daysLeft}</div>
+                  <div className="arcade-font text-3xl font-black text-white sm:text-4xl">{weeklyAllocation.daysLeft}</div>
                   <div className="pb-1 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-300 sm:text-xs">
-                    days to<br />{monthlyAllocation.endLabel}
+                    days to<br />{weeklyAllocation.endLabel}
                   </div>
                 </div>
                 <div className={`absolute inset-0 flex items-center justify-center text-center transition-all duration-500 ${showAllocationAmount ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
                   <div>
-                    <div className="arcade-font text-3xl font-black leading-none text-white sm:text-4xl">{monthlyAllocation.allocationRsc}</div>
+                    <div className="arcade-font text-3xl font-black leading-none text-white sm:text-4xl">{weeklyAllocation.allocationRsc}</div>
                     <div className="mt-1 text-[13px] font-black uppercase leading-none tracking-[0.24em] text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.45)]">RSC</div>
                     <div className="mt-1 text-[7px] font-black uppercase leading-tight tracking-[0.18em] text-slate-300">funding credits</div>
                   </div>
                 </div>
               </div>
-              <p className="mt-2 hidden text-xs leading-relaxed text-slate-300 sm:block">The monthly No. 1 pilot chooses the ResearchHub proposal pick.</p>
+              {showAllocationInfo ? (
+                <div className="absolute right-3 top-12 z-20 w-[min(240px,calc(100vw-2rem))] rounded-2xl border border-yellow-100/25 bg-slate-950/96 p-3 text-xs font-semibold leading-relaxed text-slate-200 shadow-[0_18px_55px_rgba(0,0,0,0.45)]">
+                  The weekly No. 1 pilot chooses the ResearchHub proposal pick for the 100 RSC funding-credit signal.
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -302,20 +470,20 @@ const StartScreen: React.FC<StartScreenProps> = ({
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>
                 <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">
-                  {leaderboardView === 'monthly' ? 'Monthly Leaderboard' : 'All-Time Leaderboard'}
+                  {leaderboardView === 'weekly' ? 'Weekly Leaderboard' : 'All-Time Leaderboard'}
                 </h3>
                 <p className="text-[11px] font-semibold text-slate-400">
-                  {leaderboardView === 'monthly' ? 'Top 5 resets each month.' : 'Top 25 archive across every mission.'}
+                  {leaderboardView === 'weekly' ? 'Top 5 resets each week.' : 'Top 25 archive across every mission.'}
                 </p>
               </div>
               <div className="flex shrink-0 rounded-full border border-white/10 bg-black/25 p-1">
                 <button
                   type="button"
-                  aria-label="Monthly Top 5"
-                  onClick={() => setLeaderboardView('monthly')}
-                  className={`flex min-w-[64px] flex-col items-center rounded-full px-3 py-1 text-center font-black uppercase transition ${leaderboardView === 'monthly' ? 'bg-emerald-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  aria-label="Weekly Top 5"
+                  onClick={() => setLeaderboardView('weekly')}
+                  className={`flex min-w-[64px] flex-col items-center rounded-full px-3 py-1 text-center font-black uppercase transition ${leaderboardView === 'weekly' ? 'bg-emerald-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                 >
-                  <span className="text-[7px] tracking-[0.16em] opacity-80">Monthly</span>
+                  <span className="text-[7px] tracking-[0.16em] opacity-80">Weekly</span>
                   <span className="text-[9px] tracking-[0.12em]">Top 5</span>
                 </button>
                 <button
@@ -344,13 +512,13 @@ const StartScreen: React.FC<StartScreenProps> = ({
                     <div className="py-8 text-center text-xs font-semibold text-slate-500 animate-pulse">Scanning leaderboard archive...</div>
                   ) : visibleLeaderboard.length === 0 ? (
                     <div className="py-8 text-center text-xs font-semibold text-red-300">
-                      {leaderboardView === 'monthly' ? 'No monthly scores yet. First pilot claims the pick.' : 'No global scores yet. First pilot gets the clean lane.'}
+                      {leaderboardView === 'weekly' ? 'No weekly scores yet. First pilot claims the pick.' : 'No global scores yet. First pilot gets the clean lane.'}
                     </div>
                   ) : (
                     visibleLeaderboard.map((entry, idx) => {
                       const entryKey = `${entry.name}-${entry.score}-${entry.wave}-${entry.date || idx}`;
-                      const isCurrentMonthlyChampion = leaderboardView === 'monthly' && idx === 0;
-                      const hasRscPick = isCurrentMonthlyChampion && Boolean(championCard);
+                      const isCurrentWeeklyChampion = leaderboardView === 'weekly' && idx === 0;
+                      const hasRscPick = isCurrentWeeklyChampion && Boolean(championCard);
                       const isExpanded = expandedFundingKey === entryKey;
                       const fundingTitle = championCard?.title || entry.proposalTitle || 'No proposal selected';
                       const title = hasRscPick ? `${entry.name} picked: ${fundingTitle}` : undefined;
@@ -386,7 +554,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
                             <article className="col-span-4 mt-1 rounded-2xl border border-slate-950/15 bg-white p-2 text-left tracking-normal text-slate-950 shadow-[0_14px_30px_rgba(0,0,0,0.16)]">
                               <div className="mb-2 flex items-center justify-between gap-2">
                                 <span className="rounded-full bg-yellow-200 px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em]">No. 1 RSC Pick</span>
-                                <span className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">500 RSC allocation</span>
+                                <span className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">100 RSC allocation</span>
                               </div>
                               <div className="flex gap-2">
                                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
@@ -401,11 +569,11 @@ const StartScreen: React.FC<StartScreenProps> = ({
                                 <div className="min-w-0 flex-1">
                                   <h5 className="line-clamp-2 font-sans text-xs font-black leading-snug">{fundingTitle}</h5>
                                   <div className="mt-1 truncate font-sans text-[10px] font-semibold text-slate-500">{championCard.author}</div>
-                                  {monthlyChampionLiveProposal ? (
+                                  {weeklyChampionLiveProposal ? (
                                     <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-50 p-2 font-sans text-[8px] font-bold uppercase tracking-wide text-slate-500">
-                                      <span>Ask <strong className="block font-mono text-[10px] text-blue-600">{formatUsd(monthlyChampionLiveProposal.requestedUsd)}</strong></span>
-                                      <span>Raised <strong className="block font-mono text-[10px] text-slate-950">{formatUsd(monthlyChampionLiveProposal.raisedUsd)}</strong></span>
-                                      <span>Review <strong className="block font-mono text-[10px] text-slate-950">{monthlyChampionLiveProposal.peerReview?.toFixed(1) ?? 'N/A'}</strong></span>
+                                      <span>Ask <strong className="block font-mono text-[10px] text-blue-600">{formatUsd(weeklyChampionLiveProposal.requestedUsd)}</strong></span>
+                                      <span>Raised <strong className="block font-mono text-[10px] text-slate-950">{formatUsd(weeklyChampionLiveProposal.raisedUsd)}</strong></span>
+                                      <span>Review <strong className="block font-mono text-[10px] text-slate-950">{weeklyChampionLiveProposal.peerReview?.toFixed(1) ?? 'N/A'}</strong></span>
                                     </div>
                                   ) : null}
                                 </div>
@@ -438,11 +606,36 @@ const StartScreen: React.FC<StartScreenProps> = ({
               <div className="flex items-center justify-between gap-3 px-1">
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-[0.16em] text-white">Live Proposal Deck</h3>
-                  <p className="text-[11px] font-semibold text-slate-400">Real open ResearchHub proposals pulled from the funding feed.</p>
+                  <p className="text-[11px] font-semibold text-slate-400">Swipe through real ResearchHub funding proposals.</p>
                 </div>
+                {proposalStatus === 'ready' && proposals.length > 1 ? (
+                  <div className="flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/25 p-1">
+                    <button
+                      type="button"
+                      onClick={() => moveProposalDeck(-1)}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-black text-white transition hover:border-cyan-200/40 hover:bg-cyan-300/15"
+                      aria-label="Previous proposal"
+                    >
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveProposalDeck(1)}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-cyan-200/30 bg-cyan-300/14 text-sm font-black text-cyan-50 transition hover:border-cyan-100 hover:bg-cyan-300/24"
+                      aria-label="Next proposal"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="relative mt-3 min-h-[286px] sm:min-h-[300px]">
+              <div
+                className="relative mt-3 min-h-[286px] touch-pan-y sm:min-h-[300px]"
+                onTouchStart={handleProposalTouchStart}
+                onTouchEnd={handleProposalTouchEnd}
+                aria-label="Swipe left or right to browse live proposals"
+              >
                 {proposalStatus === 'loading' ? (
                   <div className="absolute inset-x-0 top-0 rounded-[22px] border border-white/10 bg-white/[0.06] p-5 text-center text-sm font-bold text-slate-300">
                     Checking ResearchHub's live funding feed...
@@ -462,12 +655,12 @@ const StartScreen: React.FC<StartScreenProps> = ({
                 ) : null}
 
                 {proposalStatus === 'ready' ? stackedProposals.map(({ proposal, offset }) => {
-                  const isMonthlyPick = isChampionProposal(proposal);
+                  const isWeeklyPick = isChampionProposal(proposal);
 
                   return (
                   <article
                     key={proposal.id}
-                    className={`absolute inset-x-0 top-0 will-change-transform rounded-[22px] border bg-white p-3 text-slate-950 shadow-[0_22px_55px_rgba(0,0,0,0.42)] transition-[transform,opacity,filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isMonthlyPick ? 'border-yellow-300 ring-2 ring-yellow-200/60' : 'border-slate-200'} ${offset > 0 ? 'pointer-events-none' : ''}`}
+                    className={`absolute inset-x-0 top-0 will-change-transform rounded-[22px] border bg-white p-3 text-slate-950 shadow-[0_22px_55px_rgba(0,0,0,0.42)] transition-[transform,opacity,filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isWeeklyPick ? 'border-yellow-300 ring-2 ring-yellow-200/60' : 'border-slate-200'} ${offset > 0 ? 'pointer-events-none' : ''}`}
                     style={{
                       opacity: offset === 0 ? (isProposalFlipping ? 0.92 : 1) : offset === 1 ? 0.74 : 0.42,
                       filter: offset === 0 ? 'none' : `saturate(${1 - offset * 0.12}) blur(${offset * 0.15}px)`,
@@ -479,7 +672,7 @@ const StartScreen: React.FC<StartScreenProps> = ({
                       zIndex: 3 - offset
                     }}
                   >
-                    {isMonthlyPick ? (
+                    {isWeeklyPick ? (
                       <div className="absolute right-3 top-3 z-10 rounded-full border border-yellow-300 bg-yellow-200 px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-950 shadow-[0_10px_22px_rgba(250,204,21,0.3)]">
                         No. 1 Pick
                       </div>
@@ -535,6 +728,29 @@ const StartScreen: React.FC<StartScreenProps> = ({
                   );
                 }) : null}
               </div>
+
+              {proposalStatus === 'ready' && proposals.length > 1 ? (
+                <div className="mt-2 flex items-center justify-between gap-3 px-1">
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/70">Swipe deck</div>
+                  <div className="flex max-w-[70%] items-center justify-end gap-1 overflow-hidden">
+                    {proposals.slice(0, 8).map((proposal, index) => (
+                      <button
+                        key={proposal.id}
+                        type="button"
+                        onClick={() => {
+                          if (index === activeProposalIndex) return;
+                          setActiveProposalIndex(index);
+                        }}
+                        className={`h-2 rounded-full transition-all ${index === activeProposalIndex ? 'w-6 bg-cyan-200 shadow-[0_0_12px_rgba(103,232,249,0.45)]' : 'w-2 bg-white/20 hover:bg-white/45'}`}
+                        aria-label={`Go to proposal ${index + 1}`}
+                      />
+                    ))}
+                    {proposals.length > 8 ? (
+                      <span className="ml-1 text-[9px] font-black text-slate-500">+{proposals.length - 8}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-2 gap-2 rounded-[22px] border border-white/10 bg-slate-950/68 p-3 backdrop-blur-xl">
@@ -550,6 +766,15 @@ const StartScreen: React.FC<StartScreenProps> = ({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   <span className="font-black text-white">About ResearchHub:</span> an open science platform for funding, publishing, peer review, and RSC-powered community rewards.
+                  <a
+                    href={DONATION_CONFIG.KARMA_SITE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1.5 font-black text-purple-100 underline decoration-purple-300/40 underline-offset-4 hover:text-white"
+                  >
+                    <img src={ASSETS.KARMA_TOKEN} alt="" className="h-5 w-5 rounded-full border border-purple-200/35 bg-slate-950 object-cover" />
+                    KARMA promo: we have partnered with KARMA for a limited promotional period, so charity-focused KRMA credits are live.
+                  </a>
                 </p>
                 <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
                   <button onClick={onOpenXProfile} className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-2 text-[10px] font-black text-white transition hover:border-blue-300/50 hover:bg-blue-500/15 sm:flex-none sm:gap-2 sm:px-4 sm:text-xs">
@@ -565,6 +790,26 @@ const StartScreen: React.FC<StartScreenProps> = ({
                 </div>
               </div>
             </footer>
+
+            <a
+              href={DONATION_CONFIG.KARMA_SITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="overflow-hidden rounded-[18px] border border-purple-200/18 bg-purple-300/10 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-purple-100 shadow-[0_14px_40px_rgba(88,28,135,0.22)] backdrop-blur-xl"
+            >
+              <div className="scicon-promo-ticker-track flex w-max items-center gap-10 whitespace-nowrap px-4">
+                <span className="inline-flex items-center gap-2"><img src={ASSETS.KARMA_TOKEN} alt="" className="h-5 w-5 rounded-full border border-purple-200/35 object-cover" /> KARMA x SciCon Shooter promo power-up is live</span>
+                <span>Promotion: SciCon Shooter has partnered with KARMA for a limited KRMA credit period</span>
+                <span>KRMA is on BNB Smart Chain</span>
+                <span>KARMA frames its mission around charity, reflections, and community rewards</span>
+                <span>1 KRMA = 100 wallet-linked mission credits during the promo</span>
+                <span className="inline-flex items-center gap-2"><img src={ASSETS.KARMA_TOKEN} alt="" className="h-5 w-5 rounded-full border border-purple-200/35 object-cover" /> Collect the KARMA token drop in-game to fire the beam</span>
+                <span>Promotion: SciCon Shooter has partnered with KARMA for a limited KRMA credit period</span>
+                <span>KRMA is on BNB Smart Chain</span>
+                <span>KARMA frames its mission around charity, reflections, and community rewards</span>
+                <span>1 KRMA = 100 wallet-linked mission credits during the promo</span>
+              </div>
+            </a>
           </section>
         </main>
       </div>
