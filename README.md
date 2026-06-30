@@ -125,4 +125,3 @@ The normal workflow is intentionally simple:
 3. Test the branch locally.
 4. Merge useful work back into `main`.
 5. Delete branches that are no longer needed.
-
