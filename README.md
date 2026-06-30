@@ -1,56 +1,128 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SciconShooter
 
-# Run and deploy your AI Studio app
+SciconShooter is a web arcade game about turning attention, skill, and ResearchCoin energy toward open science. Players pilot the Research Flask through waves of scientific bottlenecks, upgrade their run with mission credits, and compete for a weekly leaderboard position that can help direct funding credits toward a ResearchHub proposal.
 
-This contains everything you need to run your app locally.
+Live app: https://sciconshooter.xyz
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Y8dpXQRPnZfRavbYSvuY9uqr2T_S_gML
+## What the app stands for
 
-## Run Locally
+SciconShooter is built around a simple idea: make open science funding feel visible, playful, and participatory.
 
-**Prerequisites:**  Node.js
+The game loop turns common research obstacles into arcade enemies. Players score points, survive waves, fund upgrades, and compete for leaderboard placement. The weekly No. 1 pilot gets to choose a live ResearchHub proposal, and that choice guides the 100 RSC funding-credit allocation for the week.
 
+The app is not meant to hide the funding story behind a donation button. It makes the funding target part of the game: the best run earns the right to point attention and credits toward a proposal that deserves support.
 
-1. Install dependencies:
-   `npm install`
-2. Run the app:
-   `npm run dev`
+## Core features
 
-## Supabase leaderboard
+- Space shooter gameplay with waves, bosses, upgrades, and score chasing.
+- Weekly and all-time leaderboards backed by Supabase.
+- Wallet connection through thirdweb, with Base Account recommended.
+- Mission credits that can be earned in-game or funded with tokens.
+- RSC payments on Base for mission credits.
+- Promotional KRMA payments on BNB Smart Chain for the same credit rate during the promo period.
+- Live ResearchHub proposal discovery and selection.
+- Weekly champion proposal pick stored with the winning score.
+- Vercel-hosted API routes for leaderboard, proposal, and archive flows.
 
-The app submits scores to `/api/leaderboard`. Supabase is the single source of truth for global scores, weekly scores, wallet-linked token badges, and the weekly No. 1 proposal allocation pick. Create a Supabase project, run `supabase/leaderboard.sql` in the SQL editor, then add these environment variables in Vercel. If the tables already exist, rerun the same SQL safely to add any missing columns or indexes:
+## Mission credits
+
+Mission credits are the in-game upgrade currency used during a run.
+
+- 1 RSC = 100 mission credits.
+- 1 KRMA = 100 mission credits during the promotional KARMA period.
+- Confirmed token transfers save credits to the connected wallet profile.
+- Wallet-linked credits can be deployed into a mission and spent on upgrades during that run.
+
+RSC runs on Base. Promotional KRMA runs on BNB Smart Chain. The app uses thirdweb for wallet connection, token transfer confirmation, swap/buy helpers, and wallet profile flow.
+
+## Weekly leaderboard and funding allocation
+
+SciconShooter keeps two leaderboard views:
+
+- Weekly Top 5
+- All-time Top 25
+
+Weekly leaderboard rows are filtered by the current Monday-through-Sunday week. Historical scores stay in Supabase; the weekly board is a view of the current week rather than a destructive reset.
+
+When a player takes the weekly No. 1 spot, proposal selection unlocks. The champion can search the live ResearchHub proposal feed and choose one proposal. That proposal pick is stored with the score and guides the weekly 100 RSC funding-credit allocation.
+
+## Local development
+
+Prerequisite: Node.js
+
+Install dependencies:
+
+```powershell
+npm install
+```
+
+Run locally:
+
+```powershell
+npm run dev
+```
+
+The local app usually runs at:
+
+```text
+http://127.0.0.1:5173/
+```
+
+After switching branches, run `npm install` again if the branch has different packages.
+
+## Environment variables
+
+The app can run locally without every production service configured, but these variables power the production leaderboard, wallet, and archive flows.
+
+Vercel/server-side variables:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_LEADERBOARD_TABLE` (optional, defaults to `scicon_leaderboard`)
 - `SUPABASE_MONTHLY_WINNERS_TABLE` (optional, defaults to `scicon_monthly_winners`)
 - `CRON_SECRET`
+- `MONTHLY_WINNER_WEBHOOK_URL` (optional legacy notification hook)
 
-Keep the service role key server-side only. Do not expose it with a `VITE_` prefix.
+Browser-safe variables:
 
-The home screen shows the current-week top 5 by default and lets players switch to the all-time top 25. Weekly reset is automatic: all score rows stay in `scicon_leaderboard`, and the current weekly board is just the rows whose `date` is inside the current Monday-through-Sunday week. Only a score that takes the weekly No. 1 spot can choose the ResearchHub proposal for the 100 RSC weekly allocation pick.
+- `VITE_THIRDWEB_CLIENT_ID`
+- `VITE_LEADERBOARD_API_URL` (optional, useful when testing against a deployed leaderboard)
 
-Monthly winner archiving is handled by Vercel Cron. At 00:10 UTC on the first day of each month, `/api/archive-monthly-winner` snapshots the previous month's No. 1 score and proposal pick into `scicon_monthly_winners`. You can view archived winners at `/api/monthly-winners`. To archive a month manually, send an authorized `POST` to `/api/monthly-winners` with `{ "monthKey": "YYYY-MM" }` and `Authorization: Bearer <CRON_SECRET>`.
+Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it with a `VITE_` prefix.
 
-Optional notifications: the archived-winner cron endpoints still use the original monthly table names until a weekly archive migration is added. Set `MONTHLY_WINNER_WEBHOOK_URL` only if you still want those legacy monthly archive notices.
+## Data storage
 
-To intentionally start over with a clean leaderboard, run `supabase/reset-leaderboard.sql` once in the Supabase SQL Editor. Do not add that reset SQL to normal migrations because it deletes all leaderboard rows.
+Supabase is the source of truth for:
 
-For local testing against a deployed leaderboard, set `VITE_LEADERBOARD_API_URL` in `.env.local` to the deployed API URL, such as `https://your-app.vercel.app/api/leaderboard`. For local testing against Supabase directly through the local Vite API middleware, add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to your shell environment before running `npm run dev`.
+- Global scores
+- Weekly score views
+- Wallet-linked token credit status
+- Selected ResearchHub proposal metadata
+- Archived winner records
 
-## Wallet testing
+Run `supabase/leaderboard.sql` in the Supabase SQL editor to create or update the required tables.
 
-The app uses thirdweb `ConnectButton` for wallet connection. Add `VITE_THIRDWEB_CLIENT_ID` from the thirdweb dashboard before running locally or deploying. The wallet modal recommends Base Account and also supports in-app login through email, Google, Discord, Telegram, Farcaster, and X, plus MetaMask, Rainbow, Rabby, Binance, Coinbase Wallet, Ledger, and Trust Wallet.
+If you intentionally need to clear all leaderboard data, run `supabase/reset-leaderboard.sql` manually in Supabase. Do not include that reset script in normal migrations because it deletes leaderboard rows.
 
-Social login uses thirdweb in-app wallets with redirect auth so mobile and embedded browsers do not have to allow popups. In the thirdweb dashboard, keep In-App Wallets enabled and add domain restrictions for every place the app runs, for example `localhost:5173`, `sciconshooter.xyz`, and `www.sciconshooter.xyz`. Use the public client ID in `VITE_THIRDWEB_CLIENT_ID`; never put the secret key in frontend code.
+## Deployment
 
-Token funding uses thirdweb widgets and direct ERC-20 transfers:
+The app is deployed on Vercel under the `sciconshooter` project.
 
-- Mission credits use a direct Base ERC-20 RSC transfer to the treasury wallet, then add credits after the transaction confirms.
-- Promotional KARMA credits use a direct KRMA transfer on BNB Smart Chain to the same treasury wallet. 1 KRMA earns the same 100 mission credits as 1 RSC during the promo period.
-- The Swap for RSC tab opens the thirdweb USDC-to-RSC widget with Aerodrome as a fallback route because Bridge routing can vary by token support.
-- `BuyWidget` is limited to Base USDC funding, which players can swap into RSC before buying credits.
+Production domains:
 
-Confirmed token-credit purchases are stored as wallet-linked profile credits. If a player has profile credits, the lab shows a Deploy button to move them into the current mission.
+- https://sciconshooter.xyz
+- https://www.sciconshooter.xyz
+- https://sciconshooter.vercel.app
+
+Vercel Cron archives monthly winner records through the API routes. GitHub `main` is the clean source branch for production work.
+
+## Project workflow
+
+The normal workflow is intentionally simple:
+
+1. Keep `main` clean.
+2. Create a branch only when experimenting.
+3. Test the branch locally.
+4. Merge useful work back into `main`.
+5. Delete branches that are no longer needed.
+
