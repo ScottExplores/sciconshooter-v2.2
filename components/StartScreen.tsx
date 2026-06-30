@@ -54,6 +54,21 @@ const getInitials = (name: string) => (
     .toUpperCase() || 'RH'
 );
 
+const getPastPickTime = (pick: ArchivedWinner) => {
+  const dateCandidates = [
+    pick.scoreDate,
+    /^\d{4}-\d{2}$/.test(pick.periodKey) ? `${pick.periodKey}-01T00:00:00.000Z` : pick.periodKey
+  ];
+
+  for (const candidate of dateCandidates) {
+    if (!candidate) continue;
+    const time = new Date(candidate).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+
+  return 0;
+};
+
 const StartScreen: React.FC<StartScreenProps> = ({
   onStart,
   allTimeLeaderboard,
@@ -150,6 +165,10 @@ const StartScreen: React.FC<StartScreenProps> = ({
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
+      })
+      .sort((a, b) => {
+        const dateDiff = getPastPickTime(b) - getPastPickTime(a);
+        return dateDiff || b.score - a.score;
       })
       .slice(0, 12);
   }, [allTimeLeaderboard, archivedWinners, weeklyChampion]);
